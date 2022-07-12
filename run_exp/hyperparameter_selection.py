@@ -25,7 +25,6 @@ def main():
         val_path = "'/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv'"
         test_path = "'/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv'"
         start_model_path = '/dccstor/storage/privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.01_best.model'
-        pred_dict_path = '/dccstor/storage/privateDemographics/results/synthetic/pred_dict.json'
         queue = 'x86_1h'
         task = 'fairness'
 
@@ -56,10 +55,9 @@ def main():
         train_path = '/dccstor/storage/balanceGroups/data/waterbirds'
         val_path = 'None'
         test_path = 'None'
-        queue = 'x86_24h'
+        queue = 'x86_1h'
         task = 'fairness'
-        start_model_path = '/dccstor/storage/noHarmFairness/models/waterbirds/sgd_m_1_num_epoch_360_batch_size_128_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'
-        pred_dict_path = None
+        start_model_path = "''"
 
         param_grid = {
             'erm': {
@@ -89,7 +87,6 @@ def main():
         ' /dccstor/storage/privateDemographics/methods.py' +\
         ' -a ' + method +\
         ' -d ' + dataset +\
-        ' -m ' + model +\
         ' --train_path ' + train_path +\
         ' --val_path ' + val_path +\
         ' --test_path ' + test_path +\
@@ -97,8 +94,7 @@ def main():
         ' --wandb ' + '1' +\
         ' --wandb_group_name ' + wandb_group_name +\
         ' --task ' + task +\
-        ' --start_model_path ' + start_model_path +\
-        ' --pred_dict_path ' + pred_dict_path 
+        ' --start_model_path ' + start_model_path 
 
     cmd_list = [cmd_pre]
     

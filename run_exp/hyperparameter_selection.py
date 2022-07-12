@@ -26,7 +26,6 @@ def main():
         test_path = "'/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv'"
         start_model_path = '/dccstor/storage/privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.01_best.model'
         pred_dict_path = '/dccstor/storage/privateDemographics/results/synthetic/pred_dict.json'
-        model = 'mlp'
         queue = 'x86_1h'
         task = 'fairness'
 
@@ -57,7 +56,6 @@ def main():
         train_path = '/dccstor/storage/balanceGroups/data/waterbirds'
         val_path = 'None'
         test_path = 'None'
-        model = 'resnet50'
         queue = 'x86_24h'
         task = 'fairness'
         start_model_path = '/dccstor/storage/noHarmFairness/models/waterbirds/sgd_m_1_num_epoch_360_batch_size_128_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'

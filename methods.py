@@ -1,0 +1,1042 @@
+from tqdm import tqdm
+import torch, os, random, argparse, wandb, time
+from noHarmFairness.datasets import LoadImageData
+from utils import *
+import numpy as np
+from datasets import DomainLoader, read_data
+import torch.nn.functional as F
+from copy import deepcopy
+from collections import defaultdict
+from models import *
+from settings import *
+from transformers import get_scheduler
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import normalize
+from sklearn.metrics import davies_bouldin_score, calinski_harabasz_score, silhouette_score
+from sklearn.metrics import normalized_mutual_info_score as NMI
+from sklearn.metrics.cluster import adjusted_rand_score as ARS
+from torch.utils.data import DataLoader
+
+
+################## MODEL SETTING ########################
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
+#########################################################
+
+def compute_ay(group_idx, num_domain):
+    a = group_idx % num_domain
+    y = group_idx // num_domain
+    return a, y
+
+def compute_fair_loss(
+    m,
+    num_domain,
+    num_group,
+    task,
+    device,
+    features_supp,
+    labels_supp, 
+    domains_supp,
+):
+    fair_loss_m = torch.zeros(num_group, device = device)
+    output_supp = m(features_supp)
+    if len(output_supp) == 2: _, output_supp = output_supp
+    for g in range(num_group):
+        if task == 'fairness':
+            a, y = domain_class_idx(g, num_domain)
+            group = (domains_supp == a) & (labels_supp == y)
+        elif task == 'irm':
+            group = domains_supp == g
+        if group.sum() > 0:
+            fair_loss_m[g] = F.cross_entropy(output_supp[group], labels_supp[group], reduction = 'mean')
+    return torch.clamp(fair_loss_m, max = 1e6)
+
+def get_representation(
+    model, 
+    dataset_name,
+    loader,
+    device,
+    batch_size,
+    load_representations,
+):
+    folder = '/dccstor/storage/privateDemographics/data/%s_%s_representation' % (dataset_name, model)
+
+    new_data = {}
+    if load_representations:
+        for mode in ['train', 'val', 'test']:
+            for key in ['features', 'labels', 'domains']:
+                file_path = os.path.join(folder, '%s_%s_%s_%s.pt' % (dataset_name, model, mode, key))
+                new_data[mode][key] = torch.load(file_path)
+        print('Representations are loaded from folder %s!' % folder)
+
+    else:
+        if not os.path.isdir(folder):
+            os.mkdir(folder)
+
+        new_data = {}
+        if model == 'resnet50':
+            m = torchvision.models.resnet50(pretrained=True)
+            m = torch.nn.Sequential(*list(m.children())[:-1])
+            for mode in loader:
+                new_data[mode] = defaultdict(list)
+                for _, features, labels, domains in loader[mode]:
+                    features, labels, domains = features.to(device), labels.to(device), domains.to(device)
+                    representations = m(features)
+                    new_data[mode]['features'].append(representations)
+                    new_data[mode]['labels'].append(labels)
+                    new_data[mode]['domains'].append(domains)
+
+                for key in new_data[mode]:
+                    new_data[mode][key] = torch.stack(new_data[mode][key]).cpu().detach()
+                    file_path = os.path.join(folder, '%s_%s_%s_%s.pt' % (dataset_name, model, mode, key))
+                    torch.save(new_data[mode][key], file_path)
+
+        print('Representations are saved in folder %s!' % folder)
+
+    new_loader = {}
+
+    for mode in ['train', 'val', 'test']:
+        new_loader.update({
+            mode: DataLoader(
+                LoadImageData(
+                    new_data[mode]['features'],
+                    new_data[mode]['labels'],
+                    new_data[mode]['domains'],
+                ),
+                batch_size = batch_size,
+                shuffle = False,
+            )
+        })
+    return new_loader
+
+def get_domain(
+    m,
+    loader, 
+    device,
+    optim,
+    model,
+    dataset_name,
+    batch_size,
+    num_class,
+    num_domain, 
+    num_group,
+    task,
+    lr_q,
+    lr_scheduler,
+    pred_dict_path = None,
+):
+    if pred_dict_path: 
+        with open(pred_dict_path, 'r') as f:
+            pred_dict = json.load(f)
+
+    else:
+        x_axis_labels = [5, 10, 20, 30, 40, 50, 60, 100]  # labels for x-axis
+        y_axis_labels = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]  # labels for y-axis
+        
+        run_epoch(
+            model,
+            'erm', 
+            m, 
+            loader, 
+            device, 
+            optim,
+            num_domain,
+            num_group,
+            task,
+            lr_q,
+            None,
+            1,
+            lr_scheduler,
+            domain_loader = None,
+        )
+
+        grad, true_domain, pred_domain, idx_mode, idx_class = [], [], [], [], []
+        for mode in ['train', 'val']:
+            for batch_idx, features, labels, domains in loader[mode]:
+                true_domain.append(domains.numpy())
+                idx_class.append(labels.numpy())
+
+                features, labels = features.to(device), labels.to(device)
+                for feature, label in zip(features, labels):
+                    output = m(feature)
+                    if len(output) == 2:
+                        _, output = output
+                    else:
+                        _, output = output, output 
+
+                    loss = F.cross_entropy(output.reshape(1, output.shape[-1]), label.reshape(1), reduction = 'none')
+                    optim.zero_grad()
+                    loss.backward()
+                    grad.append(get_gradient(m, model))
+
+                idx_mode.extend([mode] * len(batch_idx))
+                
+
+        grad = torch.stack(grad).cpu().detach().numpy()
+
+        true_domain = np.concatenate(true_domain)
+        idx_class = np.concatenate(idx_class)
+        true_group = group_idx(true_domain, idx_class, num_domain)
+        pred_domain = np.zeros(true_domain.shape)
+
+        num_group = 0
+
+        for y in range(num_class):
+            grad_y = grad[idx_class == y]
+            center = grad_y.mean(axis=0)
+            grad_y = grad_y - center
+            grad_y = normalize(grad_y)
+            dist = cosine_dist(grad_y, grad_y)
+
+            clusterings, arss, nmis, ious, ious2 = [], [], [], [], []
+            chi_mat, dbs_mat, sil_mat= [], [], []
+            best_dbscan_params = {}
+            best_mean = -np.inf
+
+            true_domain_y = true_domain[idx_class == y]
+
+            for eps in np.linspace(0.1, 0.7, 13):
+                chi_row, dbs_row, sil_row = [], [], []
+                for min_samples in [5, 10, 20, 30, 40, 50, 60, 100]:
+                    dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed')
+                    dbscan.fit(dist)
+
+                    try:
+                        chi, dbs, sil = internal_evals(grad, dist, dbscan.labels_)
+                        chi_row.append(chi)
+                        dbs_row.append(dbs)
+                        sil_row.append(sil)
+                        clusterings.append(dbscan.labels_)
+                    except:
+                        chi_row.append(np.nan)
+                        dbs_row.append(np.nan)
+                        sil_row.append(np.nan)
+                        clusterings.append(None)
+
+                    print('Eps', eps, 'Min samples', min_samples)
+                    print('Cluster counts', np.unique(dbscan.labels_, return_counts=True))
+            
+                    ars = ARS(true_domain_y, dbscan.labels_)
+                    arss.append(ars)
+                    nmi = NMI(true_domain_y, dbscan.labels_)
+                    nmis.append(nmi)
+                    print('ARS', ars, 'NMI', nmi)
+            
+                    iou, iou2, eq = iou_adaptive(true_domain_y, dbscan.labels_)
+                    ious.append(iou)
+                    ious2.append(iou2)
+            
+                    if eq:
+                        val = sum(iou) + sum(iou2) + iou[1] + iou2[0] + (iou[2] +iou2[2] ) /2
+                        val /= 9
+                        print("Weighted avg", val)
+                        if val > best_mean:
+                            best_mean = val
+                            best_dbscan_params['eps'] = eps
+                            best_dbscan_params['min_samples'] = min_samples
+                            pred_domain[idx_class == y] = dbscan.labels_ + num_group + 1
+            
+                    print('\n')
+            
+                chi_mat.append(chi_row)
+                dbs_mat.append(dbs_row)
+                sil_mat.append(sil_row)
+
+            num_group = len(np.unique(pred_domain))
+        
+        print(50 *'-')
+        print('DBSCAN: best ARS', max(arss), 'best NMI', max(nmis))
+        print('DBSCAN: best IOU', np.max(ious, axis=0))
+        print('DBSCAN: best IOU 2', np.max(ious2, axis=0))
+        
+        print("DBSCAN: best avg IOU", best_mean)
+        print("best avg IOU params", best_dbscan_params)
+
+        print('DBSCAN: overall ARS', ARS(true_group, pred_domain))
+
+        idx_mode = np.array(idx_mode)
+        pred_dict = {}
+        pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
+        pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
+
+        # visualize_internal_evals(
+        #     chi_mat, 
+        #     dbs_mat, 
+        #     sil_mat,
+        #     x_axis_labels,
+        #     y_axis_labels,
+        # )
+
+        # nmi_matrix(
+        #     clusterings,
+        #     x_axis_labels,
+        #     y_axis_labels,
+        # )
+
+        pred_dict['num_group'] = num_group
+
+        for mode in ['train', 'val']:
+            pred_dict['n_%s' % mode] = []
+            for g in range(pred_dict['num_group']):
+                group = np.array(pred_dict[mode]) == g
+                pred_dict['n_%s' % mode].append(int(group.sum()))
+
+        folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
+        file_name = os.path.join(folder_name, 'pred_dict.json')
+
+        with open(file_name, 'w') as f:
+            json.dump(pred_dict, f)          
+        print('Estimated domains are saved in %s' % file_name)
+                
+
+    return {
+        'train': DataLoader(
+            DomainLoader(pred_dict['train']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'val': DataLoader(
+            DomainLoader(pred_dict['val']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'num_group': pred_dict['num_group'],
+        'n': {
+            'train': torch.tensor(pred_dict['n_train'], device = device),
+            'val': torch.tensor(pred_dict['n_val'], device = device),
+        },
+    }
+        
+def get_supp(loader):
+    try:
+        i_supp, features_supp, labels_supp, domains_supp = loader['train_supp_iter'].next()
+    except StopIteration:
+        loader['train_supp_iter'] = iter(loader['train_supp'])
+        i_supp, features_supp, labels_supp, domains_supp = loader['train_supp_iter'].next()
+    return i_supp, features_supp, labels_supp, domains_supp
+
+def robust_reweight_groups(
+    q,
+    num_group,
+    lr_q,
+    fair_loss_m
+):
+    for g in range(num_group):
+        q[g] = torch.tensor([q[g] * torch.exp(lr_q * fair_loss_m[g].data), 1e10]).min()
+    q[:] = q / q.sum() * 3
+
+
+def gradient_descent(
+    model,
+    features,
+    labels,
+    domains,
+    m,
+    optim,
+    device,
+    num_domain,
+    num_group,
+    task,
+    lr_q,
+    keep_grad = False,
+    diff_f = None,
+    mode = 'standard',
+    q = None,
+    lr_scheduler = None,
+):
+    features, labels, domains = features.to(device), labels.to(device), domains.to(device)
+    output = m(features)
+    if len(output) == 2: _, output = output
+
+    if mode in ['standard']:
+        loss = F.cross_entropy(output, labels, reduction = 'sum')
+    elif mode in ['grass', 'robust_dro']:
+        loss_g = torch.zeros(num_group, device = device)
+        for g in range(num_group):
+            if task == 'irm' or mode == 'grass':
+                group = domains == g
+            elif task == 'fairness':
+                a, y = domain_class_idx(g, num_domain)
+                group = (domains == a) & (labels == y)
+
+            if group.sum() > 0:
+                loss_g[g] = F.cross_entropy(output[group], labels[group], reduction = 'mean')
+            else:
+                loss_g[g] = 0
+
+        robust_reweight_groups(
+            q,
+            num_group,
+            lr_q,
+            loss_g,
+        )
+        loss = loss_g @ q
+
+    optim.zero_grad()
+    loss.backward() 
+
+    if keep_grad:
+        with torch.no_grad():
+            parameters = get_parameters(m, model)
+            for p in parameters:
+                if p.requires_grad:
+                    diff_f.append(deepcopy(p.grad))
+
+    optim.step()
+
+    if model == 'bert':
+        lr_scheduler.step()
+        m.zero_grad()
+
+    results_dict = {
+        'loss': loss.item(), 
+        'q': q,
+    }
+    return results_dict
+
+def run_epoch(
+    model,
+    method, 
+    m, 
+    loader, 
+    device, 
+    optim,
+    num_domain,
+    num_group,
+    task,
+    lr_q,
+    q,
+    epoch,
+    lr_scheduler,
+    domain_loader = None,
+):
+    m.train()
+    tqdm_object = tqdm(loader['train'], total=len(loader['train']), desc=f"Epoch: {epoch + 1}")
+
+    if method == 'erm':
+        for _, features, labels, domains in tqdm_object:
+            results = gradient_descent(
+                model,
+                features,
+                labels,
+                domains,
+                m,
+                optim,
+                device,
+                num_domain,
+                num_group,
+                task,
+                lr_q,
+                False,
+                None,
+                'standard',
+                q,
+                lr_scheduler,
+            )
+
+    elif method == 'grass':
+        results = {'q': q}
+        for _, features, labels, domains in tqdm_object:
+            try:
+                _, pred_domain = domain_loader['train_iter'].next()
+            except StopIteration:
+                domain_loader['train_iter'] = iter(domain_loader['train'])
+                _, pred_domain = domain_loader['train_iter'].next()
+
+            results = gradient_descent(
+                model,
+                features,
+                labels,
+                pred_domain,
+                m,
+                optim,
+                device,
+                num_domain,
+                domain_loader['num_group'],
+                task,
+                lr_q,
+                False,
+                None,
+                'grass',
+                results['q'], 
+                lr_scheduler,
+            )
+    
+    elif method == 'robust_dro':
+        results = {'q': q}
+        for _, features, labels, domains in tqdm_object:
+
+            results = gradient_descent(
+                model,
+                features,
+                labels,
+                domains,
+                m,
+                optim,
+                device,
+                num_domain,
+                num_group,
+                task,
+                lr_q,
+                False,
+                None,
+                'robust_dro',
+                results['q'], 
+                lr_scheduler,
+            )
+
+def run_exp(
+    method, 
+    model,
+    train_path,
+    dataset_name = 'waterbirds',
+    val_path = None,
+    test_path = None,
+    batch_size = 128, 
+    lr = 0.002,
+    lr_q = .001,
+    num_epoch = 100,
+    weight_decay = 1e-4,
+    seed = 123,
+    target_var = 'y',
+    domain = 'a',
+    device = 'cuda:0',
+    subsample = False,
+    train_supp_frac = 0, 
+    num_workers = 0,
+    pin_memory = False,
+    log_wandb = True,
+    wandb_group_name = '',
+    task = 'fairness',
+    start_model_path = None,
+    pred_dict_path = None,
+):
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
+
+    device = torch.device(device)
+    loader, n, num_domain, num_class, num_feature = read_data(
+        train_path, 
+        val_path, 
+        test_path, 
+        batch_size,
+        target_var,
+        domain,
+        subsample,
+        device,
+        dataset_name,
+        train_supp_frac, 
+        num_workers,
+        pin_memory,
+        seed,
+    )
+
+    domain_loader = None
+
+    if task == 'fairness':
+        num_group = num_domain * num_class
+    elif task == 'irm':
+        num_group = num_domain
+
+    loader['train_supp_iter'] = iter(loader['train_supp'])
+    error_code = 0
+    params = {
+        'erm': {
+            'num_epoch': num_epoch,
+            'batch_size': batch_size,
+            'lr': lr,
+            'subsample': subsample,
+        },
+        'grass': {
+            'num_epoch': num_epoch,
+            'batch_size': batch_size,
+            'lr_q': lr_q,
+            'lr': lr,
+        },
+        'robust_dro': {
+            'num_epoch': num_epoch,
+            'batch_size': batch_size,
+            'lr_q': lr_q,
+            'lr': lr,
+        },
+    }
+
+    params[method].update({'weight_decay': weight_decay})
+
+    if log_wandb:
+        if method == 'erm' and subsample:
+            job_type = 'subsampling'
+        else:
+            job_type = method
+
+        if len(wandb_group_name) == 0:
+            wandb_group_name = dataset_name
+
+        try:
+            wandb.init(
+                project = "privateDemographics", 
+                group = wandb_group_name,
+                config = params[method],
+                job_type = job_type,
+            )
+        except:
+            import wandb
+            wandb.init(
+                project = "privateDemographics", 
+                group = wandb_group_name,
+                config = params[method],
+                job_type = job_type,
+            )  
+
+    m = load_model(
+        model = model,
+        num_feature = num_feature,
+        num_class = num_class,
+        seed = seed,
+    )
+
+    if start_model_path and method == 'grass':
+        m.load_state_dict(torch.load(start_model_path))
+
+    best_criterion = torch.tensor(0., device = device)
+    selected_epoch, lr_scheduler = 0, None
+
+    m.to(device)
+    best_m = deepcopy(m)
+
+    if model == 'bert': 
+        optim = get_bert_optim(m, lr, weight_decay)
+    elif model == 'resnet50':
+        optim = torch.optim.Adam(get_parameters(m, model), lr=lr, weight_decay=weight_decay)
+    else:
+        optim = torch.optim.Adam(get_parameters(m, model), lr=lr, weight_decay=weight_decay)
+    optim.zero_grad()
+    
+    if model == 'bert':
+        num_batches = len(loader['train'])
+        num_training_steps = num_epoch * num_batches
+        lr_scheduler = get_scheduler(
+            "linear",
+            optimizer = optim,
+            num_warmup_steps = 0,
+            num_training_steps = num_training_steps
+        )
+
+    data_json = defaultdict(list)
+    if method == 'grass':
+        domain_loader = get_domain(
+            m, 
+            loader,
+            device, 
+            optim, 
+            model,
+            dataset_name,
+            batch_size,
+            num_class,
+            num_domain, 
+            num_group,
+            task,
+            lr_q,
+            lr_scheduler,
+            pred_dict_path,
+        )
+        domain_loader['train_iter'] = iter(domain_loader['train'])
+        domain_loader['val_iter'] = iter(domain_loader['val'])
+        q = torch.ones(domain_loader['num_group'], device = device)
+    else:
+        q = torch.ones(num_group, device = device)
+
+    for epoch in range(num_epoch):
+        # training
+        print('=============== Training ===============')
+        old_m = deepcopy(m)
+        run_epoch(
+            model,
+            method, 
+            m, 
+            loader, 
+            device, 
+            optim,
+            num_domain,
+            num_group,
+            task,
+            lr_q,
+            q,
+            epoch,
+            lr_scheduler,
+            domain_loader,
+        )
+        
+        try:
+            inference(
+                method,
+                data_json, 
+                loader, 
+                'train', 
+                m, 
+                num_domain, 
+                num_group,
+                task,
+                n, 
+                device = device, 
+                log_wandb = log_wandb,
+                domain_loader = domain_loader,
+            )
+            print('=============== Validation ===============')
+            best_m, best_criterion, selected_epoch = inference(
+                method,
+                data_json, 
+                loader, 
+                'val', 
+                m,
+                num_domain, 
+                num_group,
+                task,
+                n, 
+                device = device, 
+                log_wandb = log_wandb, 
+                best_m = best_m, 
+                best_criterion = best_criterion,
+                epoch = num_epoch,
+                selected_epoch = selected_epoch,
+                domain_loader = domain_loader,
+            )
+        except ValueError:
+            m.load_state_dict(old_m.state_dict())
+            error_code = 1
+            break
+
+    if error_code:
+        print('Stop training because of some error!')
+        print('=============== Train ===============')
+        inference(
+            method,
+            data_json, 
+            loader, 
+            'train', 
+            m, 
+            num_domain, 
+            num_group,
+            task,
+            n, 
+            device = device, 
+            log_wandb = log_wandb,
+            domain_loader = domain_loader,
+        )
+        print('=============== Validation ===============')
+        best_m, best_criterion, selected_epoch = inference(
+            method,
+            data_json, 
+            loader, 
+            'val', 
+            m, 
+            num_domain, 
+            num_group,
+            task,
+            n, 
+            device = device, 
+            log_wandb = log_wandb, 
+            best_m = best_m, 
+            best_criterion = best_criterion,
+            epoch = num_epoch,
+            selected_epoch = selected_epoch,
+            domain_loader = domain_loader,
+        )
+    print('=============== Test ================')
+    print(' | selected the model from epoch %d | ' % selected_epoch)
+    inference(
+        method,
+        data_json, 
+        loader, 
+        'test', 
+        m, 
+        num_domain, 
+        num_group,
+        task,
+        n, 
+        device = device, 
+        log_wandb = log_wandb, 
+        best_m = best_m, 
+        best_criterion = best_criterion,
+        domain_loader = domain_loader,
+    )
+
+    setting_name = method
+    for param in params[method]:
+        setting_name += '_%s_%s' % (param, params[method][param])
+
+    save_results(
+        data_json,
+        dataset_name,
+        setting_name,
+        best_m,
+    )
+    if log_wandb: wandb.finish()
+
+def inference(
+    method,
+    data_json, 
+    loader, 
+    mode, 
+    m, 
+    num_domain, 
+    num_group,
+    task,
+    n, 
+    device = 'cpu',
+    log_wandb = True,
+    best_criterion = torch.tensor(0.),
+    best_m = None,
+    epoch = 0,
+    selected_epoch = 0,
+    domain_loader = None,
+):
+    loss, worst_acc, avg_acc, fair_loss = torch.tensor(0.).to(device), torch.tensor(0.).to(device), torch.tensor(0.).to(device), torch.tensor(0.).to(device)
+    if mode == 'test': m = best_m
+    reweighted_avg_acc = torch.tensor(0., device = device)
+
+    m.eval()
+    domain_acc = torch.zeros(num_group, device = device)
+    domain_loss = torch.zeros(num_group, device = device)
+
+    if mode in ['train', 'val'] and domain_loader:
+        pred_domain_acc = torch.zeros(domain_loader['num_group'], device = device)
+        pred_domain_loss = torch.zeros(domain_loader['num_group'], device = device)
+
+    for _, features, labels, domains in loader[mode]:
+        features, labels, domains = features.to(device), labels.to(device), domains.to(device)
+        if mode in ['train', 'val'] and domain_loader:
+            try:
+                _, pred_domains = domain_loader['%s_iter' % mode].next()
+            except StopIteration:
+                domain_loader['%s_iter' % mode] = iter(domain_loader[mode])
+                _, pred_domains = domain_loader['%s_iter' % mode].next()
+            pred_domains = pred_domains.to(device)
+
+        output = m(features)
+        if len(output) == 2:
+            probas, output = output
+        else:
+            probas, output = output, output 
+
+        _, pred_labels = torch.max(probas, 1)
+        pred_labels = pred_labels.view(-1).to(device)
+
+        # accuracy loss
+        loss += F.cross_entropy(output, labels, reduction = 'sum').item()
+
+        # domain acc
+        bool_correct = torch.eq(pred_labels, labels)
+        avg_acc += torch.sum(bool_correct).item()
+
+        if mode in ['train', 'val'] and domain_loader:
+            for g in range(domain_loader['num_group']):
+                group = pred_domains == g
+
+                if group.sum() > 0:
+                    pred_domain_acc[g] += torch.sum(bool_correct[group]).item()
+                    pred_domain_loss[g] += F.cross_entropy(output[group], labels[group], reduction = 'sum').item()
+
+        for g in range(num_group):
+            if task == 'fairness':
+                a, y = domain_class_idx(g, num_domain)
+                group = (domains == a) & (labels == y)
+            elif task == 'irm':
+                group = domains == g
+
+            if group.sum() > 0:
+                domain_acc[g] += torch.sum(bool_correct[group]).item()
+                domain_loss[g] += F.cross_entropy(output[group], labels[group], reduction = 'sum').item()
+
+    domain_acc, loss, domain_loss = domain_acc / torch.clamp(n[mode],min=1), loss / n[mode].sum(), domain_loss / torch.clamp(n[mode],min=1)
+    worst_acc = domain_acc.min()
+    fair_loss = domain_loss.max()
+    avg_acc = avg_acc / n[mode].sum()
+    reweighted_avg_acc = domain_acc @ (n['train'] / n['train'].sum())
+
+    if mode in ['train', 'val'] and domain_loader:
+        pred_domain_acc, pred_domain_loss = pred_domain_acc / torch.clamp(domain_loader['n'][mode],min=1), pred_domain_loss / torch.clamp(domain_loader['n'][mode],min=1)
+        pred_worst_acc = pred_domain_acc.min()
+        pred_fair_loss = pred_domain_loss.max()
+        data_json['%s_pred_worst_acc' % mode].append(pred_worst_acc.item())
+        data_json['%s_pred_fair_loss' % mode].append(pred_fair_loss.item())
+
+    data_json['%s_worst_acc' % mode].append(worst_acc.item())
+    data_json['%s_avg_acc' % mode].append(avg_acc.item())
+    data_json['%s_acc_loss' % mode].append(loss.item())
+    data_json['%s_fair_loss' % mode].append(fair_loss.item())
+    data_json['%s_reweighted_acc' % mode].append(reweighted_avg_acc.item())
+
+    if log_wandb:
+        if mode in ['train', 'val'] and domain_loader:
+            wandb.log({
+                '%s_worst_acc' % mode: data_json['%s_worst_acc' % mode][-1],
+                '%s_avg_acc' % mode: data_json['%s_avg_acc' % mode][-1],
+                '%s_pred_worst_acc' % mode: data_json['%s_pred_worst_acc' % mode][-1],
+                '%s_pred_fair_loss' % mode: data_json['%s_pred_fair_loss' % mode][-1],
+                '%s_acc_loss' % mode: data_json['%s_acc_loss' % mode][-1],
+                '%s_fair_loss' % mode: data_json['%s_fair_loss' % mode][-1],
+                '%s_reweighted_acc' % mode: data_json['%s_reweighted_acc' % mode][-1],
+            })
+        else:
+            wandb.log({
+                '%s_worst_acc' % mode: data_json['%s_worst_acc' % mode][-1],
+                '%s_avg_acc' % mode: data_json['%s_avg_acc' % mode][-1],
+                '%s_acc_loss' % mode: data_json['%s_acc_loss' % mode][-1],
+                '%s_fair_loss' % mode: data_json['%s_fair_loss' % mode][-1],
+                '%s_reweighted_acc' % mode: data_json['%s_reweighted_acc' % mode][-1],
+            })
+
+    print('##############################')
+    print('#    True Group Statistics   #')
+    print('##############################')
+    print('------------------' + '---------' * (num_group))
+    print_header    = '|      metric    |'
+    print_acc       = '|    accuracy    |'
+    print_loss      = '|      loss      |'
+
+    for g in range(num_group):
+        print_header += ' group %d|' % g
+        print_acc    += '%s%.2f%% |' % (' '*(3-len(str(round(domain_acc[g].item()*100)))), domain_acc[g] * 100)
+        print_loss   += ' %s%.2f |' % (' '*(3-len(str(round(domain_loss[g].item())))), domain_loss[g])
+    print(print_header)
+    print(print_acc)
+    print(print_loss)
+    print('------------------' + '---------' * (num_group))
+
+
+    print('| Accuracy Loss: %.4f' % loss)
+    print('| Worst-case Accuracy: %.2f%%' % (worst_acc*100))
+    print('| Average Accuracy: %.2f%%' % (avg_acc*100))
+    print('| Reweighted Accuracy: %.2f%%' % (reweighted_avg_acc*100))
+
+    if mode in ['train', 'val'] and domain_loader:
+        print('##############################')
+        print('# Predicted Group Statistics #')
+        print('##############################')
+        print('------------------' + '---------' * (domain_loader['num_group']))
+        print_header    = '|      metric    |'
+        print_acc       = '|    accuracy    |'
+        print_loss      = '|      loss      |'
+
+        for g in range(domain_loader['num_group']):
+            print_header += ' group %d|' % g
+            print_acc    += '%s%.2f%% |' % (' '*(3-len(str(round(pred_domain_acc[g].item()*100)))), pred_domain_acc[g] * 100)
+            print_loss   += ' %s%.2f |' % (' '*(3-len(str(round(pred_domain_loss[g].item())))), pred_domain_loss[g])
+        print(print_header)
+        print(print_acc)
+        print(print_loss)
+        print('------------------' + '---------' * (domain_loader['num_group']))
+
+        print('| Predicted Worst-case Accuracy: %.2f%%' % (pred_worst_acc*100))
+
+    if mode == 'val':
+        if task == 'fairness' and method != 'erm':
+            if domain_loader:
+                score = pred_worst_acc
+            else:
+                score = worst_acc
+        elif task == 'irm' or method == 'erm':
+            score = avg_acc
+
+        if score > best_criterion:
+            best_criterion = score
+            best_m = deepcopy(m)
+            selected_epoch = epoch
+        return best_m, best_criterion, selected_epoch
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='privateDemographics')
+
+    default_train_path = 'data/synthetic_moon_(100,30,300)_circles_(100,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv'
+    default_val_path = 'data/synthetic_moon_(100,30,300)_circles_(100,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv'
+    default_test_path = 'data/synthetic_moon_(100,30,300)_circles_(100,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv'
+
+    parser.add_argument("-a", "--algorithm", default = 'erm', type = str, choices = algs)
+    parser.add_argument("-m", "--model", default = 'mlp', type = str, choices = models)
+    parser.add_argument("-d", "--dataset_name", default = 'waterbirds', type = str, choices = datasets)
+    parser.add_argument("--train_path", default = default_train_path, type = str)
+    parser.add_argument("--val_path", default = default_val_path, type = str)
+    parser.add_argument("--test_path", default = default_test_path, type = str)
+    parser.add_argument("-b", "--batch_size", default = 128, type = int)
+    parser.add_argument("--lr", default = 0.002, type = float)
+    parser.add_argument("--lr_q", default = 0.001, type = float)
+    parser.add_argument("-e", "--epoch", default = 10, type = int)
+    parser.add_argument("--weight_decay", default = 1e-4, type = float)
+    parser.add_argument("--seed", default = 123, type = int)
+    parser.add_argument("--target_var", default = 'y', type = str)
+    parser.add_argument("--domain_var", default = 'a', type = str)
+    parser.add_argument("--device", default = 'cuda', type = str, choices = ['cuda', 'cpu'])
+    parser.add_argument("-s", "--subsample", default = 0, type = int, choices = [0,1])
+    parser.add_argument("-f", "--train_supp_frac", default = 0, type = float)
+    parser.add_argument("--num_worker", default = 0, type = int)
+    parser.add_argument("--pin_memory", default = 0, type = int, choices = [0,1])
+    parser.add_argument("--wandb", default = 1, type = int, choices = [0,1])
+    parser.add_argument("--wandb_group_name", default = '', type = str)
+    parser.add_argument("-t", "--task", default = 'fairness', type = str, choices = tasks)
+    parser.add_argument("--start_model_path", default = '', type = str)
+    parser.add_argument("--pred_dict_path", default = '', type = str)
+    args = parser.parse_args()
+
+    return args
+
+def main():
+    args = parse_args()
+    method = args.algorithm
+    model = args.model
+    train_path = args.train_path
+    dataset_name = args.dataset_name
+    val_path = args.val_path
+    test_path = args.test_path
+    batch_size = args.batch_size
+    lr = args.lr
+    lr_q = args.lr_q
+    num_epoch = args.epoch
+    weight_decay = args.weight_decay
+    seed = args.seed
+    target_var = args.target_var
+    domain = args.domain_var
+    subsample = args.subsample
+    device = args.device
+    train_supp_frac = args.train_supp_frac
+    num_workers = args.num_worker
+    pin_memory = args.pin_memory
+    log_wandb = args.wandb
+    wandb_group_name = args.wandb_group_name
+    task = args.task
+    start_model_path = args.start_model_path
+    pred_dict_path = args.pred_dict_path
+
+    run_exp(
+        method, 
+        model,
+        train_path,
+        dataset_name,
+        val_path,
+        test_path,
+        batch_size, 
+        lr,
+        lr_q,
+        num_epoch,
+        weight_decay,
+        seed ,
+        target_var,
+        domain,
+        device,
+        subsample,
+        train_supp_frac, 
+        num_workers,
+        pin_memory,
+        log_wandb,
+        wandb_group_name,
+        task,
+        start_model_path,
+        pred_dict_path,
+    )
+
+if __name__ == '__main__':
+    main()

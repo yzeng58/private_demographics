@@ -26,4 +26,5 @@ __pycache__
 **/wandb_sweep
 **/log_ccc
 **/results
+**/data
 

@@ -21,10 +21,7 @@ def main():
     device = 'cuda'
 
     if dataset == 'synthetic':
-        train_path = "'/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv'"
-        val_path = "'/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv'"
-        test_path = "'/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv'"
-        start_model_path = '/dccstor/storage/privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.01_best.model'
+        start_model_path = '/dccstor/storage/privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.001_best.model'
         queue = 'x86_1h'
         task = 'fairness'
 
@@ -52,9 +49,34 @@ def main():
         }
 
     elif dataset == 'waterbirds':
-        train_path = '/dccstor/storage/balanceGroups/data/waterbirds'
-        val_path = 'None'
-        test_path = 'None'
+        queue = 'x86_1h'
+        task = 'fairness'
+        start_model_path = '/dccstor/storage/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_weight_decay_0.01_best.model'
+
+        param_grid = {
+            'erm': {
+                ' --epoch ': 360,
+                ' --batch_size ': 128,
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+            'grass': {
+                ' --epoch ': 360,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+            'robust_dro': {
+                ' --epoch ': 360,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+        }
+
+    elif dataset == 'civilcomments':
         queue = 'x86_1h'
         task = 'fairness'
         start_model_path = "''"
@@ -87,9 +109,6 @@ def main():
         ' /dccstor/storage/privateDemographics/methods.py' +\
         ' -a ' + method +\
         ' -d ' + dataset +\
-        ' --train_path ' + train_path +\
-        ' --val_path ' + val_path +\
-        ' --test_path ' + test_path +\
         ' --device ' + device +\
         ' --wandb ' + '1' +\
         ' --wandb_group_name ' + wandb_group_name +\
@@ -112,7 +131,8 @@ def main():
         cmd_list, 
         '/dccstor/storage/privateDemographics/log_ccc', 
         queue, 
-        lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[3]
+        lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[3],
+        'privateDemographics'
     )    
 
 if __name__ == '__main__':

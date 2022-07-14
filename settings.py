@@ -14,6 +14,8 @@ models = [
     'resnet50',
     'bert',
     'cmnist_mlp',
+    'logreg',
+    'bert_last_layer',
 ]
 
 datasets = [

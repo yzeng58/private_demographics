@@ -1,9 +1,8 @@
 from tqdm import tqdm
-import torch, os, random, argparse, wandb, time
-from noHarmFairness.datasets import LoadImageData
+import torch, os, random, argparse, wandb, time, sys
 from utils import *
 import numpy as np
-from datasets import DomainLoader, read_data
+from datasets import DomainLoader, read_data, LoadImageData
 import torch.nn.functional as F
 from copy import deepcopy
 from collections import defaultdict
@@ -53,6 +52,7 @@ def compute_fair_loss(
 def get_representation(
     model, 
     dataset_name,
+    num_class,
     loader,
     device,
     batch_size,
@@ -63,6 +63,7 @@ def get_representation(
     new_data = {}
     if load_representations:
         for mode in ['train', 'val', 'test']:
+            new_data[mode] = {}
             for key in ['features', 'labels', 'domains']:
                 file_path = os.path.join(folder, '%s_%s_%s_%s.pt' % (dataset_name, model, mode, key))
                 new_data[mode][key] = torch.load(file_path)
@@ -75,20 +76,35 @@ def get_representation(
         new_data = {}
         if model == 'resnet50':
             m = torchvision.models.resnet50(pretrained=True)
+            # remove the last layer
             m = torch.nn.Sequential(*list(m.children())[:-1])
-            for mode in loader:
-                new_data[mode] = defaultdict(list)
-                for _, features, labels, domains in loader[mode]:
-                    features, labels, domains = features.to(device), labels.to(device), domains.to(device)
-                    representations = m(features)
-                    new_data[mode]['features'].append(representations)
-                    new_data[mode]['labels'].append(labels)
-                    new_data[mode]['domains'].append(domains)
 
-                for key in new_data[mode]:
-                    new_data[mode][key] = torch.stack(new_data[mode][key]).cpu().detach()
-                    file_path = os.path.join(folder, '%s_%s_%s_%s.pt' % (dataset_name, model, mode, key))
-                    torch.save(new_data[mode][key], file_path)
+        elif model == 'bert':
+            m = get_bert(num_class, 'head')
+
+        m.to(device)
+        m.eval()
+
+        for mode in ['train', 'val', 'test']:
+            new_data[mode] = defaultdict(list)
+            tqdm_object = tqdm(loader[mode], total=len(loader[mode]), desc="Loading Representation for %s set" % mode)
+            for _, features, labels, domains in tqdm_object:
+                features = features.to(device)
+                representations = m(features)
+                if model == 'resnet50':
+                    new_data[mode]['features'].append(representations.cpu().detach().squeeze())
+                elif model == 'bert':
+                    new_data[mode]['features'].append(representations.cpu().detach().squeeze())
+
+                new_data[mode]['labels'].append(labels.detach())
+                new_data[mode]['domains'].append(domains.detach())
+
+            for key in new_data[mode]:
+                new_data[mode][key] = torch.cat(new_data[mode][key])
+                file_path = os.path.join(folder, '%s_%s_%s_%s.pt' % (dataset_name, model, mode, key))
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                torch.save(new_data[mode][key], file_path)
 
         print('Representations are saved in folder %s!' % folder)
 
@@ -106,7 +122,7 @@ def get_representation(
                 shuffle = False,
             )
         })
-    return new_loader
+    return new_loader, new_data[mode]['features'].shape[1:]
 
 def get_domain(
     m,
@@ -122,10 +138,12 @@ def get_domain(
     task,
     lr_q,
     lr_scheduler,
-    pred_dict_path = None,
+    load_pred_dict,
 ):
-    if pred_dict_path: 
-        with open(pred_dict_path, 'r') as f:
+    if load_pred_dict: 
+        folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
+        file_name = os.path.join(folder_name, 'pred_dict.json')
+        with open(file_name, 'r') as f:
             pred_dict = json.load(f)
 
     else:
@@ -251,12 +269,13 @@ def get_domain(
         print("DBSCAN: best avg IOU", best_mean)
         print("best avg IOU params", best_dbscan_params)
 
-        print('DBSCAN: overall ARS', ARS(true_group, pred_domain))
+        ars_score = ARS(true_group, pred_domain)
 
         idx_mode = np.array(idx_mode)
         pred_dict = {}
         pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
         pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
+        pred_dict['ars']   = ars_score
 
         # visualize_internal_evals(
         #     chi_mat, 
@@ -287,7 +306,7 @@ def get_domain(
             json.dump(pred_dict, f)          
         print('Estimated domains are saved in %s' % file_name)
                 
-
+    print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
     return {
         'train': DataLoader(
             DomainLoader(pred_dict['train']),
@@ -486,11 +505,7 @@ def run_epoch(
 
 def run_exp(
     method, 
-    model,
-    train_path,
     dataset_name = 'waterbirds',
-    val_path = None,
-    test_path = None,
     batch_size = 128, 
     lr = 0.002,
     lr_q = .001,
@@ -501,14 +516,14 @@ def run_exp(
     domain = 'a',
     device = 'cuda:0',
     subsample = False,
-    train_supp_frac = 0, 
     num_workers = 0,
     pin_memory = False,
     log_wandb = True,
     wandb_group_name = '',
     task = 'fairness',
     start_model_path = None,
-    pred_dict_path = None,
+    load_pred_dict = True,
+    load_representations = True,
 ):
     np.random.seed(seed)
     random.seed(seed)
@@ -517,6 +532,15 @@ def run_exp(
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.enabled = False
+
+    if dataset_name == 'synthetic':
+        train_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv'
+        val_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv'
+        test_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv'
+    elif dataset_name in ['waterbirds', 'civilcomments']:
+        train_path = '/dccstor/storage/balanceGroups/data/%s' % dataset_name
+        val_path = None,
+        test_path = None,
 
     device = torch.device(device)
     loader, n, num_domain, num_class, num_feature = read_data(
@@ -529,7 +553,7 @@ def run_exp(
         subsample,
         device,
         dataset_name,
-        train_supp_frac, 
+        0, 
         num_workers,
         pin_memory,
         seed,
@@ -592,6 +616,36 @@ def run_exp(
                 job_type = job_type,
             )  
 
+    if dataset_name == 'waterbirds':
+        loader, num_feature = get_representation(
+            'resnet50', 
+            'waterbirds',
+            num_class,
+            loader, 
+            device,
+            batch_size,
+            load_representations,
+        )
+       
+        num_feature = num_feature[0]
+        model = 'logreg'
+
+    elif dataset_name == 'civilcomments':
+        loader, num_feature = get_representation(
+            'bert', 
+            'civilcomments',
+            num_class,
+            loader, 
+            device,
+            batch_size,
+            load_representations,
+        )
+
+        model = 'bert_last_layer'
+    
+    elif dataset_name == 'synthetic':
+        model = 'mlp'
+
     m = load_model(
         model = model,
         num_feature = num_feature,
@@ -642,7 +696,7 @@ def run_exp(
             task,
             lr_q,
             lr_scheduler,
-            pred_dict_path,
+            load_pred_dict,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
@@ -746,8 +800,29 @@ def run_exp(
             selected_epoch = selected_epoch,
             domain_loader = domain_loader,
         )
+
+    print('=============================================')
+    print('|| selected the model from epoch %d ||' % selected_epoch)
+    print('=============== Validation ===============')
+    inference(
+        method,
+        data_json, 
+        loader, 
+        'val', 
+        best_m, 
+        num_domain, 
+        num_group,
+        task,
+        n, 
+        device = device, 
+        log_wandb = log_wandb, 
+        best_m = best_m, 
+        best_criterion = best_criterion,
+        epoch = selected_epoch,
+        selected_epoch = selected_epoch,
+        domain_loader = domain_loader,
+    )
     print('=============== Test ================')
-    print(' | selected the model from epoch %d | ' % selected_epoch)
     inference(
         method,
         data_json, 
@@ -952,16 +1027,8 @@ def inference(
 def parse_args():
     parser = argparse.ArgumentParser(description='privateDemographics')
 
-    default_train_path = 'data/synthetic_moon_(100,30,300)_circles_(100,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv'
-    default_val_path = 'data/synthetic_moon_(100,30,300)_circles_(100,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv'
-    default_test_path = 'data/synthetic_moon_(100,30,300)_circles_(100,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv'
-
     parser.add_argument("-a", "--algorithm", default = 'erm', type = str, choices = algs)
-    parser.add_argument("-m", "--model", default = 'mlp', type = str, choices = models)
     parser.add_argument("-d", "--dataset_name", default = 'waterbirds', type = str, choices = datasets)
-    parser.add_argument("--train_path", default = default_train_path, type = str)
-    parser.add_argument("--val_path", default = default_val_path, type = str)
-    parser.add_argument("--test_path", default = default_test_path, type = str)
     parser.add_argument("-b", "--batch_size", default = 128, type = int)
     parser.add_argument("--lr", default = 0.002, type = float)
     parser.add_argument("--lr_q", default = 0.001, type = float)
@@ -972,14 +1039,15 @@ def parse_args():
     parser.add_argument("--domain_var", default = 'a', type = str)
     parser.add_argument("--device", default = 'cuda', type = str, choices = ['cuda', 'cpu'])
     parser.add_argument("-s", "--subsample", default = 0, type = int, choices = [0,1])
-    parser.add_argument("-f", "--train_supp_frac", default = 0, type = float)
     parser.add_argument("--num_worker", default = 0, type = int)
     parser.add_argument("--pin_memory", default = 0, type = int, choices = [0,1])
     parser.add_argument("--wandb", default = 1, type = int, choices = [0,1])
     parser.add_argument("--wandb_group_name", default = '', type = str)
     parser.add_argument("-t", "--task", default = 'fairness', type = str, choices = tasks)
     parser.add_argument("--start_model_path", default = '', type = str)
-    parser.add_argument("--pred_dict_path", default = '', type = str)
+    parser.add_argument("--load_pred_dict", default = 1, type = int, choices = [0,1])
+    parser.add_argument("--load_representations", default = 1, type = int, choices = [0,1])
+
     args = parser.parse_args()
 
     return args
@@ -987,11 +1055,7 @@ def parse_args():
 def main():
     args = parse_args()
     method = args.algorithm
-    model = args.model
-    train_path = args.train_path
     dataset_name = args.dataset_name
-    val_path = args.val_path
-    test_path = args.test_path
     batch_size = args.batch_size
     lr = args.lr
     lr_q = args.lr_q
@@ -1002,22 +1066,18 @@ def main():
     domain = args.domain_var
     subsample = args.subsample
     device = args.device
-    train_supp_frac = args.train_supp_frac
     num_workers = args.num_worker
     pin_memory = args.pin_memory
     log_wandb = args.wandb
     wandb_group_name = args.wandb_group_name
     task = args.task
     start_model_path = args.start_model_path
-    pred_dict_path = args.pred_dict_path
+    load_pred_dict = args.load_pred_dict
+    load_representations = args.load_representations
 
     run_exp(
         method, 
-        model,
-        train_path,
         dataset_name,
-        val_path,
-        test_path,
         batch_size, 
         lr,
         lr_q,
@@ -1028,14 +1088,14 @@ def main():
         domain,
         device,
         subsample,
-        train_supp_frac, 
         num_workers,
         pin_memory,
         log_wandb,
         wandb_group_name,
         task,
         start_model_path,
-        pred_dict_path,
+        load_pred_dict,
+        load_representations,
     )
 
 if __name__ == '__main__':

@@ -78,6 +78,8 @@ def save_results(data_json, dataset_name, alg, best_model):
     if not os.path.isdir(model_folder_name):
         os.mkdir(model_folder_name)
     model_file_name = os.path.join(model_folder_name, '%s_best.model' % (alg))
+    if os.path.isfile(model_file_name):
+        os.remove(model_file_name)
     torch.save(best_model.cpu().state_dict(), model_file_name)
     print('Best model is saved in %s' % (model_file_name))
 
@@ -207,7 +209,7 @@ def iou_compute(idx1, idx2):
 
     # proportion of predicted points that are in the true group
     # proportion of true points that are in the predicted group
-    return inter / len(idx1), inter / len(idx2) if len(idx2) != 0 else 0
+    return inter / max(len(idx1), 1), inter / len(idx2) if len(idx2) != 0 else 0
 
 
 def iou_stat(label_true, label_pred):

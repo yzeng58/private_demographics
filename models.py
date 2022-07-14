@@ -17,11 +17,13 @@ class BertWrapper(torch.nn.Module):
         self.model = model
 
     def forward(self, x):
-        return self.model(
+        output = self.model(
             input_ids=x[:, :, 0],
             attention_mask=x[:, :, 1],
             token_type_ids=x[:, :, 2]
-        ).logits
+        )
+        return output.logits
+            
 
 
 def get_bert_optim(network, lr, weight_decay):
@@ -50,10 +52,19 @@ def get_bert_optim(network, lr, weight_decay):
         eps=1e-8)
     return optimizer
 
-def get_bert(n_classes):
-    model = BertWrapper(
-                BertForSequenceClassification.from_pretrained(
-                    'bert-base-uncased', num_labels=n_classes))
+def get_bert(n_classes, mode = 'full'):
+    model = BertForSequenceClassification.from_pretrained(
+                'bert-base-uncased', num_labels=n_classes
+            )
+    if mode == 'last_layer':
+        model = torch.nn.Sequential(*list(model.children())[-1])
+    elif mode == 'head':
+        model = BertWrapper(
+                    torch.nn.Sequential(*list(model.children())[:-1])
+                )
+    elif mode == 'full':
+        model = BertWrapper(model)
+
     model.zero_grad()
     return model
 
@@ -101,6 +112,23 @@ class mlp(torch.nn.Module):
         out = self.linear4(out)
         probas = torch.sigmoid(out)
 
+        return probas.type(torch.FloatTensor), out
+
+class LogReg(torch.nn.Module):
+    """
+    Multilayer Perceptron
+    """
+    def __init__(self, num_features, num_classes, seed = 123):
+        torch.manual_seed(seed)
+
+        super().__init__()
+        self.num_classes = num_classes
+        self.linear = torch.nn.Linear(num_features, num_classes)
+        self.relu = torch.nn.ReLU()
+
+    def forward(self, x):
+        out = self.linear(x.float())
+        probas = torch.sigmoid(out)
         return probas.type(torch.FloatTensor), out
 
 class cmnist_mlp(torch.nn.Module):
@@ -153,8 +181,12 @@ def load_model(
         model_list = get_resnet50(num_class, True, seed)
     elif model == 'mlp':
         model_list = mlp(num_feature, num_class, seed)
+    elif model == 'logreg':
+        model_list = LogReg(num_feature, num_class, seed)
     elif model == 'bert':
         model_list = get_bert(num_class)
+    elif model == 'bert_last_layer':
+        model_list = get_bert(num_class, 'last_layer')
     elif model == 'cmnist_mlp':
         model_list = cmnist_mlp(False, 256, seed)
     return model_list

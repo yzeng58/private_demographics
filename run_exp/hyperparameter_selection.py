@@ -51,7 +51,7 @@ def main():
     elif dataset == 'waterbirds':
         queue = 'x86_1h'
         task = 'fairness'
-        start_model_path = '/dccstor/storage/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_weight_decay_0.01_best.model'
+        start_model_path = '/dccstor/storage/nhf_backup/models/waterbirds/sgd_m_1_num_epoch_360_batch_size_128_lr_1e-05_optimizer_adam_subsample_0_weight_decay_1.0_best.model'
 
         param_grid = {
             'erm': {
@@ -79,7 +79,7 @@ def main():
     elif dataset == 'civilcomments':
         queue = 'x86_1h'
         task = 'fairness'
-        start_model_path = "''"
+        start_model_path = '/dccstor/storage/nhf_backup/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'
 
         param_grid = {
             'erm': {

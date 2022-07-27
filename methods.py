@@ -172,9 +172,10 @@ def get_domain(
             for batch_idx, features, labels, domains in loader[mode]:
                 true_domain.append(domains.numpy())
                 idx_class.append(labels.numpy())
-
                 features, labels = features.to(device), labels.to(device)
                 for feature, label in zip(features, labels):
+                    if model == 'bert':
+                        feature = feature[None]
                     output = m(feature)
                     if len(output) == 2:
                         _, output = output
@@ -187,7 +188,6 @@ def get_domain(
                     grad.append(get_gradient(m, model))
 
                 idx_mode.extend([mode] * len(batch_idx))
-                
 
         grad = torch.stack(grad).cpu().detach().numpy()
 
@@ -451,6 +451,7 @@ def run_epoch(
                 q,
                 lr_scheduler,
             )
+            break
 
     elif method == 'grass':
         results = {'q': q}
@@ -631,17 +632,7 @@ def run_exp(
         model = 'logreg'
 
     elif dataset_name == 'civilcomments':
-        loader, num_feature = get_representation(
-            'bert', 
-            'civilcomments',
-            num_class,
-            loader, 
-            device,
-            batch_size,
-            load_representations,
-        )
-
-        model = 'bert_last_layer'
+        model = 'bert'
     
     elif dataset_name == 'synthetic':
         model = 'mlp'
@@ -893,6 +884,7 @@ def inference(
             pred_domains = pred_domains.to(device)
 
         output = m(features)
+
         if len(output) == 2:
             probas, output = output
         else:

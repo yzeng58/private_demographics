@@ -17,13 +17,10 @@ class BertWrapper(torch.nn.Module):
         self.model = model
 
     def forward(self, x):
-        output = self.model(
+        return self.model(
             input_ids=x[:, :, 0],
             attention_mask=x[:, :, 1],
-            token_type_ids=x[:, :, 2]
-        )
-        return output.logits
-            
+            token_type_ids=x[:, :, 2]).logits
 
 
 def get_bert_optim(network, lr, weight_decay):
@@ -46,25 +43,19 @@ def get_bert_optim(network, lr, weight_decay):
             "weight_decay": 0.0,
         },
     ]
+    
     optimizer = torch.optim.AdamW(
         optimizer_grouped_parameters,
         lr=lr,
-        eps=1e-8)
+        eps=1e-8
+    )
     return optimizer
 
-def get_bert(n_classes, mode = 'full'):
-    model = BertForSequenceClassification.from_pretrained(
-                'bert-base-uncased', num_labels=n_classes
+def get_bert(n_classes):
+    model = BertWrapper(
+                BertForSequenceClassification.from_pretrained(
+                    'bert-base-uncased', num_labels=n_classes)
             )
-    if mode == 'last_layer':
-        model = torch.nn.Sequential(*list(model.children())[-1])
-    elif mode == 'head':
-        model = BertWrapper(
-                    torch.nn.Sequential(*list(model.children())[:-1])
-                )
-    elif mode == 'full':
-        model = BertWrapper(model)
-
     model.zero_grad()
     return model
 
@@ -185,8 +176,6 @@ def load_model(
         model_list = LogReg(num_feature, num_class, seed)
     elif model == 'bert':
         model_list = get_bert(num_class)
-    elif model == 'bert_last_layer':
-        model_list = get_bert(num_class, 'last_layer')
     elif model == 'cmnist_mlp':
         model_list = cmnist_mlp(False, 256, seed)
     return model_list

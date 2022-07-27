@@ -319,9 +319,13 @@ def get_parameters(m, model):
 
 def get_gradient(m, model):
     diff = []
-    parameters = get_parameters(m, model)
-    for p in parameters:
-        diff.append(p.grad.reshape(-1))
+    if model == 'bert':
+        for p in m.model.classifier.parameters():
+            diff.append(p.grad.data.reshape(-1))
+    else:
+        parameters = get_parameters(m, model)
+        for p in parameters:
+            diff.append(p.grad.data.reshape(-1))
     return torch.cat(diff)
 
 def plot_pairwise_distances(grads, groups):

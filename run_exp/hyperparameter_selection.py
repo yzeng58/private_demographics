@@ -77,27 +77,27 @@ def main():
         }
 
     elif dataset == 'civilcomments':
-        queue = 'x86_1h'
+        queue = 'x86_24h'
         task = 'fairness'
         start_model_path = '/dccstor/storage/nhf_backup/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'
 
         param_grid = {
             'erm': {
-                ' --epoch ': 360,
-                ' --batch_size ': 128,
+                ' --epoch ': 10,
+                ' --batch_size ': 32,
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
             'grass': {
-                ' --epoch ': 360,
-                ' --batch_size ': 128,
+                ' --epoch ': 10,
+                ' --batch_size ': 32,
                 ' --lr_q ': [.001, .01, .1],
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
             'robust_dro': {
-                ' --epoch ': 360,
-                ' --batch_size ': 128,
+                ' --epoch ': 10,
+                ' --batch_size ': 32,
                 ' --lr_q ': [.001, .01, .1],
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],

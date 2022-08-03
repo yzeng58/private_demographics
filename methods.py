@@ -2,24 +2,415 @@ from tqdm import tqdm
 import torch, os, random, argparse, wandb, time, sys
 from utils import *
 import numpy as np
-from datasets import DomainLoader, read_data, LoadImageData
+from sklearn.decomposition import PCA
+from datasets import read_data, LoadImageData, DomainLoader
 import torch.nn.functional as F
 from copy import deepcopy
 from collections import defaultdict
 from models import *
 from settings import *
 from transformers import get_scheduler
+from torch.utils.data import DataLoader
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import normalize
 from sklearn.metrics import davies_bouldin_score, calinski_harabasz_score, silhouette_score
 from sklearn.metrics import normalized_mutual_info_score as NMI
 from sklearn.metrics.cluster import adjusted_rand_score as ARS
-from torch.utils.data import DataLoader
-
+from sklearn.metrics.pairwise import cosine_distances
 
 ################## MODEL SETTING ########################
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 #########################################################
+
+def collect_gradient(
+    model,
+    m,
+    loader,
+    device, 
+    optim,
+    num_domain,
+    num_group,
+    task,
+    lr_q,
+    lr_scheduler,
+    dataset_name,
+):
+    folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
+    try:
+        with open(os.path.join(folder_name, 'grad.npy'), 'rb') as f:
+            grad = np.load(f)
+        with open(os.path.join(folder_name, 'true_domain.npy'), 'rb') as f:
+            true_domain = np.load(f)
+        with open(os.path.join(folder_name, 'idx_class.npy'), 'rb') as f:
+            idx_class = np.load(f)
+        with open(os.path.join(folder_name, 'true_group.npy'), 'rb') as f:
+            true_group = np.load(f)
+        with open(os.path.join(folder_name, 'idx_mode.npy'), 'rb') as f:
+            idx_mode = np.load(f)
+        print('Loaded all the gradient information into folder %s...' % folder_name)
+    except:
+        print('Computing the gradients...')
+        run_epoch(
+            model,
+            'erm', 
+            m, 
+            loader, 
+            device, 
+            optim,
+            num_domain,
+            num_group,
+            task,
+            lr_q,
+            None,
+            1,
+            lr_scheduler,
+            domain_loader = None,
+        )
+    
+        grad, true_domain, idx_mode, idx_class = [], [], [], []
+        for mode in ['train', 'val']:
+            for batch_idx, features, labels, domains in loader[mode]:
+                true_domain.append(domains.numpy())
+                idx_class.append(labels.numpy())
+                features, labels = features.to(device), labels.to(device)
+                for feature, label in zip(features, labels):
+                    if model == 'bert':
+                        feature = feature[None]
+                    output = m(feature)
+                    if len(output) == 2:
+                        _, output = output
+                    else:
+                        _, output = output, output 
+
+                    loss = F.cross_entropy(output.reshape(1, output.shape[-1]), label.reshape(1), reduction = 'none')
+                    optim.zero_grad()
+                    loss.backward()
+                    grad.append(get_gradient(m, model))
+
+                idx_mode.extend([mode] * len(batch_idx))
+
+        grad = torch.stack(grad).cpu().detach().numpy()
+        true_domain = np.concatenate(true_domain)
+        idx_class = np.concatenate(idx_class)
+        true_group = group_idx(true_domain, idx_class, num_domain)
+        idx_mode = np.array(idx_mode)
+
+        print('Saving all the gradient information into folder %s...' % folder_name)
+        with open(os.path.join(folder_name, 'grad.npy'), 'wb') as f:
+            np.save(f, grad)
+        with open(os.path.join(folder_name, 'true_domain.npy'), 'wb') as f:
+            np.save(f, true_domain)
+        with open(os.path.join(folder_name, 'idx_class.npy'), 'wb') as f:
+            np.save(f, idx_class)
+        with open(os.path.join(folder_name, 'true_group.npy'), 'wb') as f:
+            np.save(f, true_group)
+        with open(os.path.join(folder_name, 'idx_mode.npy'), 'wb') as f:
+            np.save(f, idx_mode)
+        print('All the gradient information are saved in folder %s!' % folder_name)
+
+    return grad, true_domain, idx_class, true_group, idx_mode
+
+
+def grad_clustering_parallel(
+    m,
+    loader, 
+    device,
+    optim,
+    model,
+    dataset_name,
+    num_domain, 
+    num_group,
+    task,
+    lr_scheduler,
+    eps,
+    min_samples,
+    y,
+    log_wandb,
+    n_components,
+):      
+    grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
+        model,
+        m,
+        loader,
+        device, 
+        optim,
+        num_domain,
+        num_group,
+        task,
+        1e-3,
+        lr_scheduler,
+        dataset_name,
+    )
+
+    num_group = 0
+
+    if log_wandb:
+        try:
+            wandb.init(
+                project = 'privateDemographics',
+                group = '%s_group_prediction' % dataset_name,
+                config = {'eps': eps, 'min_samples': min_samples},
+                job_type = 'y=%d' % y
+            )
+        except:
+            import wandb
+            wandb.init(
+                project = 'privateDemographics',
+                group = '%s_group_prediction' % dataset_name,
+                config = {'eps': eps, 'min_samples': min_samples},
+                job_type = 'y=%d' % y
+            )
+
+    grad_y = grad[idx_class == y]
+    center = grad_y.mean(axis=0)
+    grad_y = grad_y - center
+    grad_y = normalize(grad_y)
+    
+
+    # in this case we have memory issue, therefore need to reduce the dimension first
+    if dataset_name == 'civilcomments' and y == 0:
+
+        # pca = PCA(n_components=n_components)
+        # pca.fit(grad_y)
+        # grad_y = pca.transform(grad_y)
+
+        tot_idxs = np.arange(grad_y.shape[0])
+        used_idx = np.zeros(grad_y.shape[0])
+        dbscan_idxs = np.random.choice(tot_idxs, size = n_components, replace = False)
+        used_idx[dbscan_idxs] = 1
+
+        dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine')
+        dbscan.fit(grad_y)
+        print(dbscan.core_sample_indices_)
+
+        dbscan_labels = np.ones(grad_y.shape[0])
+        dbscan_labels[dbscan_idxs] = dbscan.labels_
+
+        def predict(db, x):
+            pred = np.ones(x.shape[0])
+            dists = cosine_dist(x, grad_y[used_idx == 1])
+            i = np.argmin(dists, axis = 1)
+            print(i)
+            print(db.core_sample_indices_)
+            pred = db.labels_[db.core_sample_indices_[i]]
+            pred[dists[i] >= db.eps] = -1
+            return pred
+            # return db.labels_[db.core_sample_indices_[i]] if dists[i] < db.eps else -1
+
+        print(predict(dbscan, grad_y[used_idx == 0]))
+        return 
+
+    else:
+        dist = cosine_dist(grad_y, grad_y)
+        true_domain_y = true_domain[idx_class == y]
+        dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed')
+        dbscan.fit(dist)
+        dbscan_labels = dbscan.labels_
+
+
+    ars = ARS(true_domain_y, dbscan_labels)
+    nmi = NMI(true_domain_y, dbscan_labels)
+    iou, iou2, eq = iou_adaptive(true_domain_y, dbscan_labels)
+
+    val = sum(iou) + sum(iou2) + iou[1] + iou2[0] + (iou[2] +iou2[2] ) /2
+    val /= 9
+    if eq: print("Weighted avg", val)
+    pred_domain_y = dbscan_labels
+    folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
+    file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
+        y, min_samples, eps,
+    ))
+    with open(file_name, 'wb') as f:
+        np.save(f, pred_domain_y)
+
+    if log_wandb:
+        wandb.log({
+            'ars': ars,
+            'nmi': nmi,
+            'val': val,
+            'eq': eq,
+        })
+        wandb.finish()
+
+                    
+
+def get_domain(
+    m,
+    loader, 
+    device,
+    optim,
+    model,
+    dataset_name,
+    batch_size,
+    num_class,
+    num_domain, 
+    num_group,
+    task,
+    lr_q,
+    lr_scheduler,
+    load_pred_dict,
+    clustering_path,
+):
+    if load_pred_dict: 
+        folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
+        file_name = os.path.join(folder_name, 'pred_dict.json')
+        with open(file_name, 'r') as f:
+            pred_dict = json.load(f)
+
+    else:
+        x_axis_labels = [5, 10, 20, 30, 40, 50, 60, 100]  # labels for x-axis
+        y_axis_labels = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]  # labels for y-axis
+        
+        grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
+            model,
+            m,
+            loader,
+            device, 
+            optim,
+            num_domain,
+            num_group,
+            task,
+            lr_q,
+            lr_scheduler,
+            dataset_name,
+        )
+
+        pred_domain = np.zeros(true_domain.shape)
+
+        num_group = 0
+        if clustering_path:
+            for y in range(num_class):
+                with open(clustering_path[y], 'rb') as f:
+                    pred_domain[idx_class == y] = np.load(f) + num_group + 1
+                num_group = len(np.unique(pred_domain))
+
+        else:
+            for y in range(num_class):
+                grad_y = grad[idx_class == y]
+                center = grad_y.mean(axis=0)
+                grad_y = grad_y - center
+                grad_y = normalize(grad_y)
+                dist = cosine_dist(grad_y, grad_y)
+
+                clusterings, arss, nmis, ious, ious2 = [], [], [], [], []
+                chi_mat, dbs_mat, sil_mat= [], [], []
+                best_dbscan_params = {}
+                best_mean = -np.inf
+
+                true_domain_y = true_domain[idx_class == y]
+
+                for eps in np.linspace(0.1, 0.7, 13):
+                    chi_row, dbs_row, sil_row = [], [], []
+                    for min_samples in [5, 10, 20, 30, 40, 50, 60, 100]:
+                        dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed')
+                        dbscan.fit(dist)
+
+                        try:
+                            chi, dbs, sil = internal_evals(grad, dist, dbscan.labels_)
+                            chi_row.append(chi)
+                            dbs_row.append(dbs)
+                            sil_row.append(sil)
+                            clusterings.append(dbscan.labels_)
+                        except:
+                            chi_row.append(np.nan)
+                            dbs_row.append(np.nan)
+                            sil_row.append(np.nan)
+                            clusterings.append(None)
+
+                        print('Eps', eps, 'Min samples', min_samples)
+                        print('Cluster counts', np.unique(dbscan.labels_, return_counts=True))
+                
+                        ars = ARS(true_domain_y, dbscan.labels_)
+                        arss.append(ars)
+                        nmi = NMI(true_domain_y, dbscan.labels_)
+                        nmis.append(nmi)
+                        print('ARS', ars, 'NMI', nmi)
+                
+                        iou, iou2, eq = iou_adaptive(true_domain_y, dbscan.labels_)
+                        ious.append(iou)
+                        ious2.append(iou2)
+                
+                        if eq:
+                            val = sum(iou) + sum(iou2) + iou[1] + iou2[0] + (iou[2] +iou2[2] ) /2
+                            val /= 9
+                            print("Weighted avg", val)
+                            if val > best_mean:
+                                best_mean = val
+                                best_dbscan_params['eps'] = eps
+                                best_dbscan_params['min_samples'] = min_samples
+                                pred_domain[idx_class == y] = dbscan.labels_ + num_group + 1
+                
+                        print('\n')
+                
+                    chi_mat.append(chi_row)
+                    dbs_mat.append(dbs_row)
+                    sil_mat.append(sil_row)
+
+                num_group = len(np.unique(pred_domain))
+        
+                print(50 *'-')
+                print('DBSCAN: best ARS', max(arss), 'best NMI', max(nmis))
+                print('DBSCAN: best IOU', np.max(ious, axis=0))
+                print('DBSCAN: best IOU 2', np.max(ious2, axis=0))
+                
+                print("DBSCAN: best avg IOU", best_mean)
+                print("best avg IOU params", best_dbscan_params)
+
+        ars_score = ARS(true_group, pred_domain)
+
+        pred_dict = {}
+        pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
+        pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
+        pred_dict['ars']   = ars_score
+
+        # visualize_internal_evals(
+        #     chi_mat, 
+        #     dbs_mat, 
+        #     sil_mat,
+        #     x_axis_labels,
+        #     y_axis_labels,
+        # )
+
+        # nmi_matrix(
+        #     clusterings,
+        #     x_axis_labels,
+        #     y_axis_labels,
+        # )
+
+        pred_dict['num_group'] = num_group
+
+        for mode in ['train', 'val']:
+            pred_dict['n_%s' % mode] = []
+            for g in range(pred_dict['num_group']):
+                group = np.array(pred_dict[mode]) == g
+                pred_dict['n_%s' % mode].append(int(group.sum()))
+
+        folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
+        file_name = os.path.join(folder_name, 'pred_dict.json')
+
+        with open(file_name, 'w') as f:
+            json.dump(pred_dict, f)          
+        print('Estimated domains are saved in %s' % file_name)
+                
+    print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
+    return {
+        'train': DataLoader(
+            DomainLoader(pred_dict['train']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'val': DataLoader(
+            DomainLoader(pred_dict['val']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'num_group': pred_dict['num_group'],
+        'n': {
+            'train': torch.tensor(pred_dict['n_train'], device = device),
+            'val': torch.tensor(pred_dict['n_val'], device = device),
+        },
+    }
+        
 
 def compute_ay(group_idx, num_domain):
     a = group_idx % num_domain
@@ -124,207 +515,6 @@ def get_representation(
         })
     return new_loader, new_data[mode]['features'].shape[1:]
 
-def get_domain(
-    m,
-    loader, 
-    device,
-    optim,
-    model,
-    dataset_name,
-    batch_size,
-    num_class,
-    num_domain, 
-    num_group,
-    task,
-    lr_q,
-    lr_scheduler,
-    load_pred_dict,
-):
-    if load_pred_dict: 
-        folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
-        file_name = os.path.join(folder_name, 'pred_dict.json')
-        with open(file_name, 'r') as f:
-            pred_dict = json.load(f)
-
-    else:
-        x_axis_labels = [5, 10, 20, 30, 40, 50, 60, 100]  # labels for x-axis
-        y_axis_labels = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]  # labels for y-axis
-        
-        run_epoch(
-            model,
-            'erm', 
-            m, 
-            loader, 
-            device, 
-            optim,
-            num_domain,
-            num_group,
-            task,
-            lr_q,
-            None,
-            1,
-            lr_scheduler,
-            domain_loader = None,
-        )
-
-        grad, true_domain, pred_domain, idx_mode, idx_class = [], [], [], [], []
-        for mode in ['train', 'val']:
-            for batch_idx, features, labels, domains in loader[mode]:
-                true_domain.append(domains.numpy())
-                idx_class.append(labels.numpy())
-                features, labels = features.to(device), labels.to(device)
-                for feature, label in zip(features, labels):
-                    if model == 'bert':
-                        feature = feature[None]
-                    output = m(feature)
-                    if len(output) == 2:
-                        _, output = output
-                    else:
-                        _, output = output, output 
-
-                    loss = F.cross_entropy(output.reshape(1, output.shape[-1]), label.reshape(1), reduction = 'none')
-                    optim.zero_grad()
-                    loss.backward()
-                    grad.append(get_gradient(m, model))
-
-                idx_mode.extend([mode] * len(batch_idx))
-
-        grad = torch.stack(grad).cpu().detach().numpy()
-
-        true_domain = np.concatenate(true_domain)
-        idx_class = np.concatenate(idx_class)
-        true_group = group_idx(true_domain, idx_class, num_domain)
-        pred_domain = np.zeros(true_domain.shape)
-
-        num_group = 0
-
-        for y in range(num_class):
-            grad_y = grad[idx_class == y]
-            center = grad_y.mean(axis=0)
-            grad_y = grad_y - center
-            grad_y = normalize(grad_y)
-            dist = cosine_dist(grad_y, grad_y)
-
-            clusterings, arss, nmis, ious, ious2 = [], [], [], [], []
-            chi_mat, dbs_mat, sil_mat= [], [], []
-            best_dbscan_params = {}
-            best_mean = -np.inf
-
-            true_domain_y = true_domain[idx_class == y]
-
-            for eps in np.linspace(0.1, 0.7, 13):
-                chi_row, dbs_row, sil_row = [], [], []
-                for min_samples in [5, 10, 20, 30, 40, 50, 60, 100]:
-                    dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed')
-                    dbscan.fit(dist)
-
-                    try:
-                        chi, dbs, sil = internal_evals(grad, dist, dbscan.labels_)
-                        chi_row.append(chi)
-                        dbs_row.append(dbs)
-                        sil_row.append(sil)
-                        clusterings.append(dbscan.labels_)
-                    except:
-                        chi_row.append(np.nan)
-                        dbs_row.append(np.nan)
-                        sil_row.append(np.nan)
-                        clusterings.append(None)
-
-                    print('Eps', eps, 'Min samples', min_samples)
-                    print('Cluster counts', np.unique(dbscan.labels_, return_counts=True))
-            
-                    ars = ARS(true_domain_y, dbscan.labels_)
-                    arss.append(ars)
-                    nmi = NMI(true_domain_y, dbscan.labels_)
-                    nmis.append(nmi)
-                    print('ARS', ars, 'NMI', nmi)
-            
-                    iou, iou2, eq = iou_adaptive(true_domain_y, dbscan.labels_)
-                    ious.append(iou)
-                    ious2.append(iou2)
-            
-                    if eq:
-                        val = sum(iou) + sum(iou2) + iou[1] + iou2[0] + (iou[2] +iou2[2] ) /2
-                        val /= 9
-                        print("Weighted avg", val)
-                        if val > best_mean:
-                            best_mean = val
-                            best_dbscan_params['eps'] = eps
-                            best_dbscan_params['min_samples'] = min_samples
-                            pred_domain[idx_class == y] = dbscan.labels_ + num_group + 1
-            
-                    print('\n')
-            
-                chi_mat.append(chi_row)
-                dbs_mat.append(dbs_row)
-                sil_mat.append(sil_row)
-
-            num_group = len(np.unique(pred_domain))
-        
-        print(50 *'-')
-        print('DBSCAN: best ARS', max(arss), 'best NMI', max(nmis))
-        print('DBSCAN: best IOU', np.max(ious, axis=0))
-        print('DBSCAN: best IOU 2', np.max(ious2, axis=0))
-        
-        print("DBSCAN: best avg IOU", best_mean)
-        print("best avg IOU params", best_dbscan_params)
-
-        ars_score = ARS(true_group, pred_domain)
-
-        idx_mode = np.array(idx_mode)
-        pred_dict = {}
-        pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
-        pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
-        pred_dict['ars']   = ars_score
-
-        # visualize_internal_evals(
-        #     chi_mat, 
-        #     dbs_mat, 
-        #     sil_mat,
-        #     x_axis_labels,
-        #     y_axis_labels,
-        # )
-
-        # nmi_matrix(
-        #     clusterings,
-        #     x_axis_labels,
-        #     y_axis_labels,
-        # )
-
-        pred_dict['num_group'] = num_group
-
-        for mode in ['train', 'val']:
-            pred_dict['n_%s' % mode] = []
-            for g in range(pred_dict['num_group']):
-                group = np.array(pred_dict[mode]) == g
-                pred_dict['n_%s' % mode].append(int(group.sum()))
-
-        folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
-        file_name = os.path.join(folder_name, 'pred_dict.json')
-
-        with open(file_name, 'w') as f:
-            json.dump(pred_dict, f)          
-        print('Estimated domains are saved in %s' % file_name)
-                
-    print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
-    return {
-        'train': DataLoader(
-            DomainLoader(pred_dict['train']),
-            batch_size = batch_size,
-            shuffle = False,
-        ),
-        'val': DataLoader(
-            DomainLoader(pred_dict['val']),
-            batch_size = batch_size,
-            shuffle = False,
-        ),
-        'num_group': pred_dict['num_group'],
-        'n': {
-            'train': torch.tensor(pred_dict['n_train'], device = device),
-            'val': torch.tensor(pred_dict['n_val'], device = device),
-        },
-    }
-        
 def get_supp(loader):
     try:
         i_supp, features_supp, labels_supp, domains_supp = loader['train_supp_iter'].next()
@@ -451,7 +641,7 @@ def run_epoch(
                 q,
                 lr_scheduler,
             )
-            break
+            
 
     elif method == 'grass':
         results = {'q': q}
@@ -504,6 +694,138 @@ def run_epoch(
                 lr_scheduler,
             )
 
+def pred_groups(
+    dataset_name,
+    batch_size,
+    seed,
+    device,
+    y,
+    min_samples,
+    eps,
+    target_var = 'y',
+    domain = 'a',
+    num_workers = 0,
+    pin_memory = False,
+    task = 'fairness',
+    start_model_path = None,
+    load_representations = True,
+    log_wandb = False,
+    n_components = 100,
+):
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
+
+    if dataset_name == 'synthetic':
+        train_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv'
+        val_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv'
+        test_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv'
+    elif dataset_name in ['waterbirds', 'civilcomments']:
+        train_path = '/dccstor/storage/balanceGroups/data/%s' % dataset_name
+        val_path = None,
+        test_path = None,
+
+    device = torch.device(device)
+    loader, n, num_domain, num_class, num_feature = read_data(
+        train_path, 
+        val_path, 
+        test_path, 
+        batch_size,
+        target_var,
+        domain,
+        False,
+        device,
+        dataset_name,
+        0, 
+        num_workers,
+        pin_memory,
+        seed,
+    )
+
+    if task == 'fairness':
+        num_group = num_domain * num_class
+    elif task == 'irm':
+        num_group = num_domain
+
+    loader['train_supp_iter'] = iter(loader['train_supp'])
+
+    if dataset_name == 'waterbirds':
+        loader, num_feature = get_representation(
+            'resnet50', 
+            'waterbirds',
+            num_class,
+            loader, 
+            device,
+            batch_size,
+            load_representations,
+        )
+       
+        num_feature = num_feature[0]
+        model = 'logreg'
+
+    elif dataset_name == 'civilcomments':
+        model = 'bert'
+    
+    elif dataset_name == 'synthetic':
+        model = 'mlp'
+
+    m = load_model(
+        model = model,
+        num_feature = num_feature,
+        num_class = num_class,
+        seed = seed,
+    )
+
+    try: 
+        m.load_state_dict(torch.load(start_model_path))
+    except RuntimeError: 
+        print('CUDA device not available. Skip...')
+
+    m.to(device)
+
+    if model == 'bert': 
+        optim = get_bert_optim(m, 1e-3, 1e-5)
+    elif model == 'resnet50':
+        optim = torch.optim.Adam(get_parameters(m, model), lr=1e-3, weight_decay=1e-5)
+    else:
+        optim = torch.optim.Adam(get_parameters(m, model), lr=1e-3, weight_decay=1e-5)
+    optim.zero_grad()
+    
+
+    if model == 'bert':
+        num_batches = len(loader['train'])
+        num_training_steps = 1 * num_batches
+        lr_scheduler = get_scheduler(
+            "linear",
+            optimizer = optim,
+            num_warmup_steps = 0,
+            num_training_steps = num_training_steps
+        )
+    else:
+        lr_scheduler = None
+
+    grad_clustering_parallel(
+        m,
+        loader, 
+        device,
+        optim,
+        model,
+        dataset_name,
+        num_domain, 
+        num_group,
+        task,
+        lr_scheduler,
+        eps,
+        min_samples,
+        y,
+        log_wandb,
+        n_components,
+    )
+
 def run_exp(
     method, 
     dataset_name = 'waterbirds',
@@ -525,6 +847,7 @@ def run_exp(
     start_model_path = None,
     load_pred_dict = True,
     load_representations = True,
+    clustering_path_use = True,
 ):
     np.random.seed(seed)
     random.seed(seed)
@@ -645,7 +968,10 @@ def run_exp(
     )
 
     if start_model_path and method == 'grass':
-        m.load_state_dict(torch.load(start_model_path))
+        try:
+            m.load_state_dict(torch.load(start_model_path))
+        except RuntimeError:
+            print('CUDA not available! Skip...')
 
     best_criterion = torch.tensor(0., device = device)
     selected_epoch, lr_scheduler = 0, None
@@ -673,6 +999,18 @@ def run_exp(
 
     data_json = defaultdict(list)
     if method == 'grass':
+        clustering_path = None
+        if clustering_path_use: 
+            if dataset_name == 'civilcomments':
+                clustering_path = None
+            elif dataset_name == 'waterbirds':
+                clustering_path = None
+            elif dataset_name == 'synthetic':
+                clustering_path = [
+                    '/dccstor/storage/privateDemographics/results/synthetic/clustering_y_0_min_samples_20_eps_0.40.npy',
+                    '/dccstor/storage/privateDemographics/results/synthetic/clustering_y_1_min_samples_60_eps_0.45.npy'
+                ]
+
         domain_loader = get_domain(
             m, 
             loader,
@@ -688,7 +1026,9 @@ def run_exp(
             lr_q,
             lr_scheduler,
             load_pred_dict,
+            clustering_path,
         )
+
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
         q = torch.ones(domain_loader['num_group'], device = device)
@@ -1019,6 +1359,7 @@ def inference(
 def parse_args():
     parser = argparse.ArgumentParser(description='privateDemographics')
 
+    parser.add_argument("-g", "--pred_groups", default = 0, type = int, choices = [0,1])
     parser.add_argument("-a", "--algorithm", default = 'erm', type = str, choices = algs)
     parser.add_argument("-d", "--dataset_name", default = 'waterbirds', type = str, choices = datasets)
     parser.add_argument("-b", "--batch_size", default = 128, type = int)
@@ -1039,6 +1380,9 @@ def parse_args():
     parser.add_argument("--start_model_path", default = '', type = str)
     parser.add_argument("--load_pred_dict", default = 1, type = int, choices = [0,1])
     parser.add_argument("--load_representations", default = 1, type = int, choices = [0,1])
+    parser.add_argument('--clustering_y', default = 0, type = int)
+    parser.add_argument('--clustering_min_samples', default = 5, type = int)
+    parser.add_argument('--clustering_eps', default = 0.1, type = float)
 
     args = parser.parse_args()
 
@@ -1046,6 +1390,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    
     method = args.algorithm
     dataset_name = args.dataset_name
     batch_size = args.batch_size
@@ -1066,29 +1411,52 @@ def main():
     start_model_path = args.start_model_path
     load_pred_dict = args.load_pred_dict
     load_representations = args.load_representations
+    pred_groups_only = args.pred_groups
+    y = args.clustering_y
+    min_samples = args.clustering_min_samples
+    eps = args.clustering_eps
 
-    run_exp(
-        method, 
-        dataset_name,
-        batch_size, 
-        lr,
-        lr_q,
-        num_epoch,
-        weight_decay,
-        seed ,
-        target_var,
-        domain,
-        device,
-        subsample,
-        num_workers,
-        pin_memory,
-        log_wandb,
-        wandb_group_name,
-        task,
-        start_model_path,
-        load_pred_dict,
-        load_representations,
-    )
+    if pred_groups_only:
+        pred_groups(
+            dataset_name,
+            batch_size,
+            seed,
+            device,
+            y,
+            min_samples,
+            eps,
+            target_var,
+            domain,
+            num_workers,
+            pin_memory,
+            task,
+            start_model_path,
+            load_representations,
+            log_wandb,
+        )
+    else:
+        run_exp(
+            method, 
+            dataset_name,
+            batch_size, 
+            lr,
+            lr_q,
+            num_epoch,
+            weight_decay,
+            seed ,
+            target_var,
+            domain,
+            device,
+            subsample,
+            num_workers,
+            pin_memory,
+            log_wandb,
+            wandb_group_name,
+            task,
+            start_model_path,
+            load_pred_dict,
+            load_representations,
+        )
 
 if __name__ == '__main__':
     main()

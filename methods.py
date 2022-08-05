@@ -126,7 +126,6 @@ def grad_clustering_parallel(
     min_samples,
     y,
     log_wandb,
-    n_components,
 ):      
     grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
         model,
@@ -165,48 +164,17 @@ def grad_clustering_parallel(
     center = grad_y.mean(axis=0)
     grad_y = grad_y - center
     grad_y = normalize(grad_y)
-    
 
-    # in this case we have memory issue, therefore need to reduce the dimension first
-    if dataset_name == 'civilcomments' and y == 0:
+    true_domain_y = true_domain[idx_class == y]
 
-        # pca = PCA(n_components=n_components)
-        # pca.fit(grad_y)
-        # grad_y = pca.transform(grad_y)
+    # dist = cosine_dist(grad_y, grad_y)
+    # dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed')
+    # dbscan.fit(dist)
 
-        tot_idxs = np.arange(grad_y.shape[0])
-        used_idx = np.zeros(grad_y.shape[0])
-        dbscan_idxs = np.random.choice(tot_idxs, size = n_components, replace = False)
-        used_idx[dbscan_idxs] = 1
+    dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine')
+    dbscan.fit(grad_y)
 
-        dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine')
-        dbscan.fit(grad_y)
-        print(dbscan.core_sample_indices_)
-
-        dbscan_labels = np.ones(grad_y.shape[0])
-        dbscan_labels[dbscan_idxs] = dbscan.labels_
-
-        def predict(db, x):
-            pred = np.ones(x.shape[0])
-            dists = cosine_dist(x, grad_y[used_idx == 1])
-            i = np.argmin(dists, axis = 1)
-            print(i)
-            print(db.core_sample_indices_)
-            pred = db.labels_[db.core_sample_indices_[i]]
-            pred[dists[i] >= db.eps] = -1
-            return pred
-            # return db.labels_[db.core_sample_indices_[i]] if dists[i] < db.eps else -1
-
-        print(predict(dbscan, grad_y[used_idx == 0]))
-        return 
-
-    else:
-        dist = cosine_dist(grad_y, grad_y)
-        true_domain_y = true_domain[idx_class == y]
-        dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed')
-        dbscan.fit(dist)
-        dbscan_labels = dbscan.labels_
-
+    dbscan_labels = dbscan.labels_
 
     ars = ARS(true_domain_y, dbscan_labels)
     nmi = NMI(true_domain_y, dbscan_labels)
@@ -710,7 +678,6 @@ def pred_groups(
     start_model_path = None,
     load_representations = True,
     log_wandb = False,
-    n_components = 100,
 ):
     np.random.seed(seed)
     random.seed(seed)
@@ -724,7 +691,7 @@ def pred_groups(
         train_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv'
         val_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv'
         test_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv'
-    elif dataset_name in ['waterbirds', 'civilcomments']:
+    elif dataset_name in ['waterbirds', 'civilcomments', 'multinli']:
         train_path = '/dccstor/storage/balanceGroups/data/%s' % dataset_name
         val_path = None,
         test_path = None,
@@ -767,7 +734,7 @@ def pred_groups(
         num_feature = num_feature[0]
         model = 'logreg'
 
-    elif dataset_name == 'civilcomments':
+    elif dataset_name in ['civilcomments', 'multinli']:
         model = 'bert'
     
     elif dataset_name == 'synthetic':
@@ -823,7 +790,6 @@ def pred_groups(
         min_samples,
         y,
         log_wandb,
-        n_components,
     )
 
 def run_exp(
@@ -861,7 +827,7 @@ def run_exp(
         train_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv'
         val_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv'
         test_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv'
-    elif dataset_name in ['waterbirds', 'civilcomments']:
+    elif dataset_name in ['waterbirds', 'civilcomments', 'multinli']:
         train_path = '/dccstor/storage/balanceGroups/data/%s' % dataset_name
         val_path = None,
         test_path = None,
@@ -954,7 +920,7 @@ def run_exp(
         num_feature = num_feature[0]
         model = 'logreg'
 
-    elif dataset_name == 'civilcomments':
+    elif dataset_name in ['civilcomments', 'multinli']:
         model = 'bert'
     
     elif dataset_name == 'synthetic':
@@ -1002,7 +968,10 @@ def run_exp(
         clustering_path = None
         if clustering_path_use: 
             if dataset_name == 'civilcomments':
-                clustering_path = None
+                clustering_path = [
+                    '/dccstor/storage/privateDemographics/results/civilcomments/clustering_y_0_min_samples_50_eps_0.35.npy',
+                    '/dccstor/storage/privateDemographics/results/civilcomments/clustering_y_1_min_samples_100_eps_0.50.npy'
+                ]
             elif dataset_name == 'waterbirds':
                 clustering_path = None
             elif dataset_name == 'synthetic':
@@ -1010,6 +979,12 @@ def run_exp(
                     '/dccstor/storage/privateDemographics/results/synthetic/clustering_y_0_min_samples_20_eps_0.40.npy',
                     '/dccstor/storage/privateDemographics/results/synthetic/clustering_y_1_min_samples_60_eps_0.45.npy'
                 ]
+            elif dataset_name == 'multinli':
+                # clustering_path = [
+                #     '/dccstor/storage/privateDemographics/results/multinli/clustering_y_0_min_samples_20_eps_0.40.npy',
+                #     '/dccstor/storage/privateDemographics/results/multinli/clustering_y_1_min_samples_60_eps_0.45.npy'
+                # ]
+                clustering_path = None
 
         domain_loader = get_domain(
             m, 

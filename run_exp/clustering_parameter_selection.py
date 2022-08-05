@@ -23,11 +23,12 @@ def main():
         num_cores = 4
 
         param_grid = {
-            ' --clustering_y ': 0,# list(range(num_class)),
+            ' --clustering_y ': list(range(num_class)),
             ' --batch_size ': 32,
             ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
             ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100]
         }
+
     elif dataset == 'synthetic':
         queue = 'x86_1h'
         start_model_path = '/dccstor/storage/privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.001_best.model'
@@ -37,6 +38,19 @@ def main():
         param_grid = {
             ' --clustering_y ': list(range(num_class)),
             ' --batch_size ': 128,
+            ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
+            ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100]
+        }
+
+    elif dataset == 'multinli':
+        queue = 'x86_1h'
+        start_model_path = '/dccstor/storage/privateDemographics/models/multinli/erm_num_epoch_10_batch_size_32_lr_2e-05_subsample_0_weight_decay_0.0001_best.model'
+        num_class = 3
+        num_cores = 4
+
+        param_grid = {
+            ' --clustering_y ': list(range(num_class)),
+            ' --batch_size ': 32,
             ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
             ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100]
         }

@@ -19,8 +19,10 @@ def main():
     method = args.algorithm
     wandb_group_name = args.wandb_group_name
     device = 'cuda'
+    mem = '16g'
 
     if dataset == 'synthetic':
+        cores = '2+1'
         start_model_path = '/dccstor/storage/privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.001_best.model'
         queue = 'x86_1h'
         task = 'fairness'
@@ -51,6 +53,7 @@ def main():
     elif dataset == 'waterbirds':
         queue = 'x86_1h'
         task = 'fairness'
+        cores = '2+1'
         start_model_path = '/dccstor/storage/nhf_backup/models/waterbirds/sgd_m_1_num_epoch_360_batch_size_128_lr_1e-05_optimizer_adam_subsample_0_weight_decay_1.0_best.model'
 
         param_grid = {
@@ -79,6 +82,7 @@ def main():
     elif dataset == 'civilcomments':
         queue = 'x86_24h'
         task = 'fairness'
+        cores = '4+1'
         start_model_path = '/dccstor/storage/nhf_backup/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'
 
         param_grid = {
@@ -100,6 +104,36 @@ def main():
                 ' --batch_size ': 32,
                 ' --lr_q ': [.001, .01, .1],
                 ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+        }
+
+    elif dataset == 'multinli':
+        queue = 'x86_24h'
+        task = 'fairness'
+        start_model_path = "''"
+        cores = '4+1'
+        mem = '32g'
+
+        param_grid = {
+            'erm': {
+                ' --epoch ': 10,
+                ' --batch_size ': 32,
+                ' --lr ': [2e-5, 2e-4, 2e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+            'grass': {
+                ' --epoch ': 10,
+                ' --batch_size ': 32,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [2e-5, 2e-4, 2e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+            'robust_dro': {
+                ' --epoch ': 10,
+                ' --batch_size ': 32,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [2e-5, 2e-4, 2e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
         }
@@ -132,7 +166,9 @@ def main():
         '/dccstor/storage/privateDemographics/log_ccc', 
         queue, 
         lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[3],
-        'privateDemographics'
+        'privateDemographics',
+        cores,
+        mem,
     )    
 
 if __name__ == '__main__':

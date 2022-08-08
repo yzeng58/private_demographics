@@ -9,6 +9,7 @@ def parse_args():
     parser.add_argument("-a", "--algorithm", default = 'erm', type = str, choices = algs)
     parser.add_argument('-d', '--dataset', default = 'synthetic', type = str, choices = datasets)
     parser.add_argument('--wandb_group_name', default = '', type = str)
+    parser.add_argument('--outlier', default = 0, type = int, choices = [0,1])
     args = parser.parse_args()
     return args
 
@@ -20,6 +21,7 @@ def main():
     wandb_group_name = args.wandb_group_name
     device = 'cuda'
     mem = '16g'
+    outlier = args.outlier
 
     if dataset == 'synthetic':
         cores = '2+1'
@@ -54,7 +56,10 @@ def main():
         queue = 'x86_1h'
         task = 'fairness'
         cores = '2+1'
-        start_model_path = '/dccstor/storage/nhf_backup/models/waterbirds/sgd_m_1_num_epoch_360_batch_size_128_lr_1e-05_optimizer_adam_subsample_0_weight_decay_1.0_best.model'
+        if outlier:
+            start_model_path = '/dccstor/storage/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_outlier_1_weight_decay_0.0001_best.model'
+        else:
+            start_model_path = '/dccstor/storage/nhf_backup/models/waterbirds/sgd_m_1_num_epoch_360_batch_size_128_lr_1e-05_optimizer_adam_subsample_0_weight_decay_1.0_best.model'
 
         param_grid = {
             'erm': {
@@ -147,7 +152,8 @@ def main():
         ' --wandb ' + '1' +\
         ' --wandb_group_name ' + wandb_group_name +\
         ' --task ' + task +\
-        ' --start_model_path ' + start_model_path 
+        ' --start_model_path ' + start_model_path +\
+        ' --outlier ' + str(outlier)
 
     cmd_list = [cmd_pre]
     

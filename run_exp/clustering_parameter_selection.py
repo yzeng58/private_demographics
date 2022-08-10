@@ -72,7 +72,7 @@ def main():
         param_grid = {
             ' --clustering_y ': list(range(num_class)),
             ' --batch_size ': 32,
-            ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
+            ' --clustering_eps ': np.linspace(0.1, 1.5, 20).tolist(),
             ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100]
         }
 
@@ -100,7 +100,7 @@ def main():
         cmd_list, 
         '/dccstor/storage/privateDemographics/log_ccc', 
         queue, 
-        lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[11],
+        lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[13],
         'privateDemographics',
         '%d+0' % num_cores,
         mem

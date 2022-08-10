@@ -10,6 +10,7 @@ def parse_args():
     parser.add_argument('-d', '--dataset', default = 'synthetic', type = str, choices = datasets)
     parser.add_argument('--wandb_group_name', default = '', type = str)
     parser.add_argument('--outlier', default = 0, type = int, choices = [0,1])
+    parser.add_argument('--process_grad', default = 1, type = int, choices = [0,1])
     args = parser.parse_args()
     return args
 
@@ -22,6 +23,7 @@ def main():
     device = 'cuda'
     mem = '16g'
     outlier = args.outlier
+    process_grad = args.process_grad
 
     if dataset == 'synthetic':
         cores = '2+1'
@@ -116,7 +118,7 @@ def main():
     elif dataset == 'multinli':
         queue = 'x86_24h'
         task = 'fairness'
-        start_model_path = "''"
+        start_model_path = "/dccstor/storage/privateDemographics/models/multinli/erm_num_epoch_10_batch_size_32_lr_2e-05_subsample_0_weight_decay_0.0001_best.model"
         cores = '4+1'
         mem = '32g'
 
@@ -125,21 +127,21 @@ def main():
                 ' --epoch ': 10,
                 ' --batch_size ': 32,
                 ' --lr ': [2e-5, 2e-4, 2e-3],
-                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2],
             },
             'grass': {
                 ' --epoch ': 10,
                 ' --batch_size ': 32,
                 ' --lr_q ': [.001, .01, .1],
                 ' --lr ': [2e-5, 2e-4, 2e-3],
-                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2],
             },
             'robust_dro': {
                 ' --epoch ': 10,
                 ' --batch_size ': 32,
                 ' --lr_q ': [.001, .01, .1],
                 ' --lr ': [2e-5, 2e-4, 2e-3],
-                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2],
             },
         }
     
@@ -153,7 +155,8 @@ def main():
         ' --wandb_group_name ' + wandb_group_name +\
         ' --task ' + task +\
         ' --start_model_path ' + start_model_path +\
-        ' --outlier ' + str(outlier)
+        ' --outlier ' + str(outlier) +\
+        ' --process_grad ' + str(process_grad)
 
     cmd_list = [cmd_pre]
     

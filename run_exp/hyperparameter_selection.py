@@ -144,6 +144,36 @@ def main():
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2],
             },
         }
+
+    elif dataset == 'compas':
+        queue = 'x86_1h'
+        task = 'fairness'
+        start_model_path = '/dccstor/storage/privateDemographics/models/compas/erm_num_epoch_300_batch_size_128_lr_2e-05_subsample_0_outlier_0_weight_decay_0.001_best.model'
+        cores = '2+1'
+        mem = '16g'
+
+        param_grid = {
+            'erm': {
+                ' --epoch ': 300,
+                ' --batch_size ': 128,
+                ' --lr ': [2e-5, 2e-4, 2e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2],
+            },
+            'grass': {
+                ' --epoch ': 300,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [2e-5, 2e-4, 2e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2],
+            },
+            'robust_dro': {
+                ' --epoch ': 300,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [2e-5, 2e-4, 2e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2],
+            },
+        }
     
 
     cmd_pre = 'python' +\

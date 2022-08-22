@@ -7,7 +7,7 @@ import torch, os, random, sys
 from torch.utils.data import Dataset
 from collections import defaultdict
 from torch.utils.data import DataLoader
-sys.path.insert(1, '/dccstor/storage/noHarmFairness/references/BalancingGroups/branches')
+sys.path.insert(1, '../noHarmFairness/references/BalancingGroups/branches')
 from clean_up.datasets import get_loaders
 from utils import group_idx
 
@@ -261,7 +261,7 @@ def read_data(
             n[mode] = n[mode].to(device)
 
     elif dataset_name == 'cmnist':
-        mnist = torch_dataset.MNIST('/dccstor/storage/balanceGroups/data/cmnist', train=True)
+        mnist = torch_dataset.MNIST('../balanceGroups/data/cmnist', train=True)
         mnist_train = (mnist.data[:50000], mnist.targets[:50000])
         mnist_val = (mnist.data[50000:], mnist.targets[50000:])
 
@@ -343,3 +343,85 @@ def read_data(
             
 
 
+def simul_x_y_a(prop_mtx, n=100, mu_mult=1., cov_mult=0.5, skew=2., rotate=0, outliers=False):
+    
+    mu_y0_a0 = np.array([1.,1.])*mu_mult
+    mu_y0_a1 = np.array([5., 7.])*mu_mult
+    mu_y1_a0 = np.array([1.,3.])*mu_mult
+    mu_y1_a1 = np.array([3., 7.])*mu_mult
+    
+    # mu_y0_a0 = np.array([1.,1.])*mu_mult
+    # mu_y0_a1 = np.array([5., 7.])*mu_mult
+    # mu_y1_a0 = np.array([-1,1.])*mu_mult
+    # mu_y1_a1 = np.array([3., 7.])*mu_mult
+    
+    
+    mu = [[mu_y0_a0, mu_y0_a1], [mu_y1_a0, mu_y1_a1]]
+    
+    cov_y0_a0 = np.array([skew,1.])*cov_mult
+    cov_y0_a1 = np.array([1.,skew])*cov_mult
+    cov_y1_a0 = np.array([skew,1.])*cov_mult
+    cov_y1_a1 = np.array([1.,skew])*cov_mult
+    
+    # cov_y0_a0 = np.array([1.,skew])*cov_mult
+    # cov_y0_a1 = np.array([1.,skew])*cov_mult
+    # cov_y1_a0 = np.array([1.,skew])*cov_mult
+    # cov_y1_a1 = np.array([1.,skew])*cov_mult
+    
+    cov = [[cov_y0_a0, cov_y0_a1], [cov_y1_a0, cov_y1_a1]]
+    
+    data_x = []
+    data_y = []
+    data_a = []
+    
+    for y in [0,1]:
+        for a in [0,1]:
+            n_ya = int(n*prop_mtx[y][a])
+            data_y += n_ya*[y]
+            data_a += n_ya*[a]
+            data_x.append(np.random.normal(loc=mu[y][a], scale=np.sqrt(cov[y][a]), size=(n_ya,2)))
+            
+            if a == 1 and rotate > 0:
+                mean = data_x[-1].mean(axis=0)
+                data_x[-1] = (data_x[-1]-mean) @ rotation(rotate) + mean
+    
+    order = np.random.permutation(len(data_y))
+    
+    data_x = np.vstack(data_x)[order]
+    data_x = np.sqrt(data_x - data_x.min(axis=0))
+    # if rotate > 0:
+    #     mean = data_x.mean(axis=0)
+    #     data_x = (data_x-mean) @ rotation(rotate) + mean
+        
+    data_y = np.array(data_y)[order]
+    data_a = np.array(data_a)[order]
+
+    data_p = np.zeros(data_y.size)
+
+    if outliers:
+        data_x, data_a, data_y = add_outliers(data_x, data_a, data_y)
+    return data_x, data_a, data_y
+
+def add_outliers(x, a, y, flip_label=0.025, random_pts=0.025):
+    mask = np.zeros(y.size, dtype=int)
+    mask[:int(flip_label*y.size)] = 1
+    np.random.shuffle(mask)
+    y = np.absolute(np.subtract(mask, y))
+
+    samples, dim = x.shape
+    random_x = np.random.rand(int(random_pts*samples), dim)*6
+    random_labels = np.around(np.random.rand(int(random_pts*samples)))
+    random_a = np.around(np.random.rand(int(random_pts*samples)))
+    ones_p = np.append(mask, np.ones(int(random_pts*samples))).astype('int')
+
+    x = np.concatenate((x, random_x), axis=0)
+    a = np.append(a, random_a)
+    a[ones_p==1] = 2
+    y = np.append(y, random_labels)
+    return x.astype('double'), a.astype('int'), y.astype('int')
+
+def rotation(angle):
+    theta = np.radians(angle)
+    c, s = np.cos(theta), np.sin(theta)
+    R = np.array(((c, -s), (s, c)))
+    return R

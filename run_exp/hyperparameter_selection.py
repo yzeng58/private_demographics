@@ -1,7 +1,7 @@
 import argparse, sys
 sys.path.insert(1, '..')
 from settings import *
-sys.path.insert(1, '/dccstor/storage')
+sys.path.insert(1, '..')
 from submit_jobs import submit_jobs
 
 def parse_args():
@@ -27,7 +27,7 @@ def main():
 
     if dataset == 'synthetic':
         cores = '2+1'
-        start_model_path = '/dccstor/storage/privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.001_best.model'
+        start_model_path = '../privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.001_best.model'
         queue = 'x86_1h'
         task = 'fairness'
 
@@ -59,9 +59,9 @@ def main():
         task = 'fairness'
         cores = '2+1'
         if outlier:
-            start_model_path = '/dccstor/storage/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_outlier_1_weight_decay_0.0001_best.model'
+            start_model_path = '../privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_outlier_1_weight_decay_0.0001_best.model'
         else:
-            start_model_path = '/dccstor/storage/nhf_backup/models/waterbirds/sgd_m_1_num_epoch_360_batch_size_128_lr_1e-05_optimizer_adam_subsample_0_weight_decay_1.0_best.model'
+            start_model_path = '../nhf_backup/models/waterbirds/sgd_m_1_num_epoch_360_batch_size_128_lr_1e-05_optimizer_adam_subsample_0_weight_decay_1.0_best.model'
 
         param_grid = {
             'erm': {
@@ -90,7 +90,7 @@ def main():
         queue = 'x86_24h'
         task = 'fairness'
         cores = '4+1'
-        start_model_path = '/dccstor/storage/nhf_backup/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'
+        start_model_path = '../nhf_backup/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'
 
         param_grid = {
             'erm': {
@@ -118,7 +118,7 @@ def main():
     elif dataset == 'multinli':
         queue = 'x86_24h'
         task = 'fairness'
-        start_model_path = "/dccstor/storage/privateDemographics/models/multinli/erm_num_epoch_10_batch_size_32_lr_2e-05_subsample_0_weight_decay_0.0001_best.model"
+        start_model_path = "../privateDemographics/models/multinli/erm_num_epoch_10_batch_size_32_lr_2e-05_subsample_0_weight_decay_0.0001_best.model"
         cores = '4+1'
         mem = '32g'
 
@@ -148,7 +148,7 @@ def main():
     elif dataset == 'compas':
         queue = 'x86_1h'
         task = 'fairness'
-        start_model_path = '/dccstor/storage/privateDemographics/models/compas/erm_num_epoch_300_batch_size_128_lr_2e-05_subsample_0_outlier_0_weight_decay_0.001_best.model'
+        start_model_path = '../privateDemographics/models/compas/erm_num_epoch_300_batch_size_128_lr_2e-05_subsample_0_outlier_0_weight_decay_0.001_best.model'
         cores = '2+1'
         mem = '16g'
 
@@ -177,7 +177,7 @@ def main():
     
 
     cmd_pre = 'python' +\
-        ' /dccstor/storage/privateDemographics/methods.py' +\
+        ' ../privateDemographics/methods.py' +\
         ' -a ' + method +\
         ' -d ' + dataset +\
         ' --device ' + device +\
@@ -202,7 +202,7 @@ def main():
     # print(cmd_list[0])
     submit_jobs(
         cmd_list, 
-        '/dccstor/storage/privateDemographics/log_ccc', 
+        '../privateDemographics/log_ccc', 
         queue, 
         lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[3],
         'privateDemographics',

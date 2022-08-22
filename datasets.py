@@ -7,7 +7,8 @@ import torch, os, random, sys
 from torch.utils.data import Dataset
 from collections import defaultdict
 from torch.utils.data import DataLoader
-sys.path.insert(1, '../noHarmFairness/references/BalancingGroups/branches')
+from settings import *
+sys.path.insert(1, '%s/noHarmFairness/references/BalancingGroups/branches' % root_dir)
 from clean_up.datasets import get_loaders
 from utils import group_idx
 

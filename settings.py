@@ -1,3 +1,5 @@
+root_dir = '/Users/zengyuchen/research/IBM/dccstore/storage'
+
 algs = [
     'erm',
     'grass',

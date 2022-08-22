@@ -1,7 +1,7 @@
 import argparse, sys
 sys.path.insert(1, '..')
 from settings import *
-sys.path.insert(1, '..')
+sys.path.insert(1, root_dir)
 from submit_jobs import submit_jobs
 import numpy as np
 
@@ -9,15 +9,16 @@ def parse_args():
     parser = argparse.ArgumentParser(description='privateDemographics')
     parser.add_argument("-d", "--dataset", default = 'civilcomments', type = str, choices = datasets)
     parser.add_argument('--outlier', default = 0, type = int, choices = [0,1])
+    parser.add_argument('-p', '--pred_group', default = 0, type = int, choices = [0,1])
     args = parser.parse_args()
     return args
 
-def main():
-    args = parse_args()
+def main(args):
     dataset = args.dataset
     device = 'cpu'
     mem = '16g'
     outlier = args.outlier
+    pred_group = args.pred_group
 
     if dataset == 'civilcomments':
         queue = 'x86_1h'
@@ -50,7 +51,7 @@ def main():
         if outlier:
             start_model_path = '../privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_outlier_1_weight_decay_0.0001_best.model'
         else:
-            start_model_path = '../nhf_backup/models/waterbirds/sgd_m_1_num_epoch_360_batch_size_128_lr_1e-05_optimizer_adam_subsample_0_weight_decay_1.0_best.model'
+            start_model_path = '%s/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_1e-05_subsample_False_weight_decay_1_best.model' % root_dir
 
         num_class = 2
         num_cores = 2
@@ -76,13 +77,23 @@ def main():
             ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100]
         }
 
-    cmd_pre = 'python' +\
-        ' ../privateDemographics/methods.py' +\
-        ' -g ' + '1' +\
-        ' -d ' + dataset +\
-        ' --device ' + device +\
-        ' --start_model_path ' + start_model_path +\
-        ' --outlier ' + str(outlier)
+    if pred_group:
+        cmd_pre = 'python' +\
+            ' %s/privateDemographics/methods.py' % root_dir +\
+            ' -g ' + '1' +\
+            ' -d ' + dataset +\
+            ' --device ' + device +\
+            ' --start_model_path ' + start_model_path +\
+            ' --outlier ' + str(outlier)
+    else:
+        cmd_pre = 'python' +\
+            ' %s/privateDemographics/methods.py' % root_dir +\
+            ' -g ' + '0' +\
+            ' -d ' + dataset +\
+            ' --device ' + device +\
+            ' --start_model_path ' + start_model_path +\
+            ' --outlier ' + str(outlier) +\
+            ' --best_clustering_parameter ' + '0'
 
     cmd_list = [cmd_pre]
     
@@ -107,5 +118,6 @@ def main():
     )    
 
 if __name__ == '__main__':
-    main()
+    args = parse_args()
+    main(args)
     

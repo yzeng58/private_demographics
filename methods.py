@@ -35,7 +35,7 @@ def collect_gradient(
     lr_scheduler,
     dataset_name,
 ):
-    folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     try:
         with open(os.path.join(folder_name, 'grad.npy'), 'rb') as f:
             grad = np.load(f)
@@ -184,7 +184,7 @@ def grad_clustering_parallel(
     val /= 9
     if eq: print("Weighted avg", val)
     pred_domain_y = dbscan_labels
-    folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
         y, min_samples, eps,
     ))
@@ -220,7 +220,7 @@ def get_domain(
     clustering_path,
 ):
     if load_pred_dict: 
-        folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
+        folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
         file_name = os.path.join(folder_name, 'pred_dict.json')
         with open(file_name, 'r') as f:
             pred_dict = json.load(f)
@@ -353,7 +353,7 @@ def get_domain(
                 group = np.array(pred_dict[mode]) == g
                 pred_dict['n_%s' % mode].append(int(group.sum()))
 
-        folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
+        folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
         file_name = os.path.join(folder_name, 'pred_dict.json')
 
         with open(file_name, 'w') as f:
@@ -417,7 +417,7 @@ def get_representation(
     batch_size,
     load_representations,
 ):
-    folder = '/dccstor/storage/privateDemographics/data/%s_%s_representation' % (dataset_name, model)
+    folder = '%s/privateDemographics/data/%s_%s_representation' % (root_dir, dataset_name, model)
 
     new_data = {}
     if load_representations:
@@ -688,11 +688,11 @@ def pred_groups(
     torch.backends.cudnn.enabled = False
 
     if dataset_name == 'synthetic':
-        train_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv'
-        val_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv'
-        test_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv'
+        train_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv' % root_dir
+        val_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv' % root_dir
+        test_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv' % root_dir
     elif dataset_name in ['waterbirds', 'civilcomments', 'multinli']:
-        train_path = '/dccstor/storage/balanceGroups/data/%s' % dataset_name
+        train_path = '%s/balanceGroups/data/%s' % (root_dir, dataset_name)
         val_path = None,
         test_path = None,
 
@@ -824,11 +824,11 @@ def run_exp(
     torch.backends.cudnn.enabled = False
 
     if dataset_name == 'synthetic':
-        train_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv'
-        val_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv'
-        test_path = '/dccstor/storage/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv'
+        train_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv' % root_dir
+        val_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv' % root_dir
+        test_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv' % root_dir
     elif dataset_name in ['waterbirds', 'civilcomments', 'multinli']:
-        train_path = '/dccstor/storage/balanceGroups/data/%s' % dataset_name
+        train_path = '%s/balanceGroups/data/%s' % (root_dir, dataset_name)
         val_path = None,
         test_path = None,
 
@@ -969,20 +969,20 @@ def run_exp(
         if clustering_path_use: 
             if dataset_name == 'civilcomments':
                 clustering_path = [
-                    '/dccstor/storage/privateDemographics/results/civilcomments/clustering_y_0_min_samples_50_eps_0.35.npy',
-                    '/dccstor/storage/privateDemographics/results/civilcomments/clustering_y_1_min_samples_100_eps_0.50.npy'
+                    '%s/privateDemographics/results/civilcomments/clustering_y_0_min_samples_50_eps_0.35.npy' % root_dir,
+                    '%s/privateDemographics/results/civilcomments/clustering_y_1_min_samples_100_eps_0.50.npy' % root_dir
                 ]
             elif dataset_name == 'waterbirds':
                 clustering_path = None
             elif dataset_name == 'synthetic':
                 clustering_path = [
-                    '/dccstor/storage/privateDemographics/results/synthetic/clustering_y_0_min_samples_20_eps_0.40.npy',
-                    '/dccstor/storage/privateDemographics/results/synthetic/clustering_y_1_min_samples_60_eps_0.45.npy'
+                    '%s/privateDemographics/results/synthetic/clustering_y_0_min_samples_20_eps_0.40.npy' % root_dir,
+                    '%s/privateDemographics/results/synthetic/clustering_y_1_min_samples_60_eps_0.45.npy' % root_dir
                 ]
             elif dataset_name == 'multinli':
                 # clustering_path = [
-                #     '/dccstor/storage/privateDemographics/results/multinli/clustering_y_0_min_samples_20_eps_0.40.npy',
-                #     '/dccstor/storage/privateDemographics/results/multinli/clustering_y_1_min_samples_60_eps_0.45.npy'
+                #     '%s/privateDemographics/results/multinli/clustering_y_0_min_samples_20_eps_0.40.npy' % root_dir,
+                #     '%s/privateDemographics/results/multinli/clustering_y_1_min_samples_60_eps_0.45.npy' % root_dir
                 # ]
                 clustering_path = None
 

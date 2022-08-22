@@ -1,3 +1,5 @@
+root_dir = '/mnt/cloud/yzeng58'
+
 algs = [
     'erm',
     'grass',

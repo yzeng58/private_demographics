@@ -15,6 +15,7 @@ from sklearn.metrics import davies_bouldin_score, calinski_harabasz_score, silho
 from collections import Counter
 from mpl_toolkits.mplot3d import Axes3D
 import seaborn as sns
+from setting import *
 
 ################## MODEL SETTING ########################
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -66,7 +67,7 @@ def irm_penalty(logits, labels, device = 'cpu'):
     return torch.sum(grad**2)
     
 def save_results(data_json, dataset_name, alg, best_model):
-    folder_name = '/dccstor/storage/privateDemographics/results/%s' % dataset_name
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     if not os.path.isdir(folder_name):
         os.mkdir(folder_name)
     file_name = os.path.join(folder_name, '%s.json' % alg)
@@ -74,7 +75,7 @@ def save_results(data_json, dataset_name, alg, best_model):
         json.dump(data_json, f)
         print('Results saved in %s!' % file_name)
 
-    model_folder_name = '/dccstor/storage/privateDemographics/models/%s' % dataset_name
+    model_folder_name = '%s/privateDemographics/models/%s' % (root_dir, dataset_name)
     if not os.path.isdir(model_folder_name):
         os.mkdir(model_folder_name)
     model_file_name = os.path.join(model_folder_name, '%s_best.model' % (alg))

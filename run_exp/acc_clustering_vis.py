@@ -55,10 +55,33 @@ def main(args):
         num_cores = 2
 
         param_grid = {
-            ' --clustering_y ': list(range(num_class)),
+            ' -a ': 'grass',
             ' --batch_size ': 128,
             ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
             ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100],
+            ' --lr ' : 0.001,
+            ' --lr_q ': 0.001,
+            ' --epoch ': 360,
+        }
+
+    elif dataset == 'compas':
+        queue = 'x86_1h'
+        if outlier:
+            start_model_path = '../privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_outlier_1_weight_decay_0.0001_best.model'
+        else:
+            start_model_path = '%s/privateDemographics/models/compas/erm_num_epoch_300_batch_size_128_lr_2e-05_subsample_0_outlier_0_weight_decay_0.001_best.model' % root_dir
+
+        num_class = 2
+        num_cores = 2
+
+        param_grid = {
+            ' -a ': 'grass',
+            ' --batch_size ': 128,
+            ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
+            ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100],
+            ' --lr ' : 0.001,
+            ' --lr_q ': 0.001,
+            ' --epoch ': 300,
         }
 
     elif dataset == 'multinli':
@@ -77,11 +100,13 @@ def main(args):
 
     cmd_pre = 'python' +\
         ' %s/privateDemographics/methods.py' % root_dir +\
-        ' -g ' + '1' +\
+        ' -g ' + '0' +\
         ' -d ' + dataset +\
         ' --device ' + device +\
         ' --start_model_path ' + start_model_path +\
-        ' --outlier ' + str(outlier)
+        ' --outlier ' + str(outlier) +\
+        ' --best_clustering_parameter ' + '0' +\
+        ' --wandb_group_name ' + '%s_vis_acc' % dataset
 
     cmd_list = [cmd_pre]
     
@@ -94,7 +119,7 @@ def main(args):
         else:
             cmd_list = list(map(lambda x: x+param+str(param_grid[param]), cmd_list))
     
-    get_exp_name = lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[13]
+    get_exp_name = lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[17]
 
     # print(cmd_list[0])
     submit_jobs(

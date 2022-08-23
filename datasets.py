@@ -182,6 +182,36 @@ def df_tabular_data(
         df['train_supp'] = train.copy()
     return df
 
+def preprocess_compas(df: pd.DataFrame):
+    """Preprocess dataset"""
+
+    columns = [
+        'juv_fel_count', 'juv_misd_count', 'juv_other_count', 'priors_count',
+             'age',
+             'c_charge_degree',
+             'sex', 'race', 'is_recid']
+    target_variable = 'is_recid'
+
+    df = df[['id'] + columns].drop_duplicates()
+    df = df[columns]
+
+    race_dict = {'African-American': 1, 'Caucasian': 0}
+    df['race'] = df.apply(lambda x: race_dict[x['race']] if x['race'] in race_dict.keys() else 2, axis=1).astype(
+    'category')
+
+    sex_map = {'Female': 0, 'Male': 1}
+    df['sex'] = df['sex'].map(sex_map)
+
+    c_charge_degree_map = {'F': 0, 'M': 1}
+    df['c_charge_degree'] = df['c_charge_degree'].map(c_charge_degree_map)
+    num_sex = np.unique(df['sex']).shape[0]
+    num_race = np.unique(df['race']).shape[0]
+    df['a'] = df['sex'].astype(int) * num_race + df['race'].astype(int)
+
+    df = df.rename(columns = {target_variable: 'y'})
+    
+    return df.drop(['sex', 'race'], axis=1)
+
 def read_data(
     train_path, 
     val_path, 
@@ -196,17 +226,34 @@ def read_data(
     num_workers = 1,
     pin_memory = False,
     seed = 123,
+    outlier = False,
 ):
     np.random.seed(seed)
     random.seed(seed)
     torch.manual_seed(seed)
-    if dataset_name == 'synthetic':
-        df = df_tabular_data(
-            train_path,
-            val_path,
-            test_path,
-            train_supp_frac
-        )
+    if dataset_name in ['synthetic', 'compas']:
+        if dataset_name == 'synthetic':
+            df = df_tabular_data(
+                train_path,
+                val_path,
+                test_path,
+                train_supp_frac
+            )
+        elif dataset_name == 'compas':
+            compas = preprocess_compas(pd.read_csv(
+                '%s/compas-scores-two-years.csv' % train_path
+            ))
+
+            df = {}
+            df['train'] = compas.iloc[:int(len(compas)*.6)]
+            df['val']   = compas.iloc[int(len(compas)*.6):int(len(compas)*.8)]
+            df['test']  = compas.iloc[int(len(compas)*.8):]
+            if train_supp_frac:
+                n_supp = int(len(df['train']) * train_supp_frac)
+                df['train_supp'] = df['train'].iloc[:n_supp]
+                df['train'] = df['train'].iloc[n_supp:]
+            else:
+                df['train_supp'] = df['train'].copy()
 
         num_domain = len(set(df['val'][domain]))
         num_class = len(set(df['val'][target_var]))
@@ -254,6 +301,7 @@ def read_data(
             pin_memory = pin_memory, 
             train_supp_frac = train_supp_frac,
             seed = seed,
+            outlier = outlier,
         )
         for mode in ['train', 'val', 'test']:
             loader[mode] = loader[mode[:2]]
@@ -262,7 +310,7 @@ def read_data(
             n[mode] = n[mode].to(device)
 
     elif dataset_name == 'cmnist':
-        mnist = torch_dataset.MNIST('../balanceGroups/data/cmnist', train=True)
+        mnist = torch_dataset.MNIST('%s/balanceGroups/data/cmnist' % root_dir, train=True)
         mnist_train = (mnist.data[:50000], mnist.targets[:50000])
         mnist_val = (mnist.data[50000:], mnist.targets[50000:])
 
@@ -340,10 +388,9 @@ def read_data(
 
         for mode in loader:
             loader[mode] = DataLoader(loader[mode], batch_size = batch_size, shuffle=False)
+
     return loader, n, num_domain, num_class, num_feature
             
-
-
 def simul_x_y_a(prop_mtx, n=100, mu_mult=1., cov_mult=0.5, skew=2., rotate=0, outliers=False):
     
     mu_y0_a0 = np.array([1.,1.])*mu_mult

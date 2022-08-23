@@ -26,6 +26,7 @@ datasets = [
     'waterbirds',
     'synthetic',
     'cmnist',
+    'compas',
 ]
 
 optimizers = [

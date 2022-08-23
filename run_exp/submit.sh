@@ -29,5 +29,10 @@
 # python hyperparameter_selection.py -a grass -d waterbirds --wandb_group_name waterbirds_outlier --outlier 1
 
 # python hyperparameter_selection.py -a erm -d compas --wandb_group_name compas_2.0
-python hyperparameter_selection.py -a grass -d compas --wandb_group_name compas_2.0
+# python hyperparameter_selection.py -a grass -d compas --wandb_group_name compas_2.0
 # python hyperparameter_selection.py -a robust_dro -d compas --wandb_group_name compas_2.0
+
+# python clustering_parameter_selection.py -p 0 -d waterbirds 
+# python clustering_parameter_selection.py -p 0 -d compas
+
+python acc_clustering_vis.py -d waterbirds

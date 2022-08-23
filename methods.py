@@ -200,7 +200,6 @@ def grad_clustering_parallel(
         })
         wandb.finish()
 
-                    
 
 def get_domain(
     m,
@@ -814,6 +813,10 @@ def run_exp(
     load_pred_dict = True,
     load_representations = True,
     clustering_path_use = True,
+    best_clustering_parameter = True,
+    min_samples = None,
+    eps = None,
+    outlier_frac = 0.2,
 ):
     np.random.seed(seed)
     random.seed(seed)
@@ -877,6 +880,12 @@ def run_exp(
             'lr_q': lr_q,
             'lr': lr,
         },
+        'doro': {
+            'num_epoch': num_epoch,
+            'batch_size': batch_size,
+            'outlier_frac': outlier_frac,
+            'lr': lr,
+        }
     }
 
     params[method].update({'weight_decay': weight_decay})
@@ -966,25 +975,31 @@ def run_exp(
     data_json = defaultdict(list)
     if method == 'grass':
         clustering_path = None
-        if clustering_path_use: 
-            if dataset_name == 'civilcomments':
+        if clustering_path_use:
+            if best_clustering_parameter: 
+                if dataset_name == 'civilcomments':
+                    clustering_path = [
+                        '%s/privateDemographics/results/civilcomments/clustering_y_0_min_samples_50_eps_0.35.npy' % root_dir,
+                        '%s/privateDemographics/results/civilcomments/clustering_y_1_min_samples_100_eps_0.50.npy' % root_dir
+                    ]
+                elif dataset_name == 'waterbirds':
+                    clustering_path = None
+                elif dataset_name == 'synthetic':
+                    clustering_path = [
+                        '%s/privateDemographics/results/synthetic/clustering_y_0_min_samples_20_eps_0.40.npy' % root_dir,
+                        '%s/privateDemographics/results/synthetic/clustering_y_1_min_samples_60_eps_0.45.npy' % root_dir
+                    ]
+                elif dataset_name == 'multinli':
+                    # clustering_path = [
+                    #     '%s/privateDemographics/results/multinli/clustering_y_0_min_samples_20_eps_0.40.npy' % root_dir,
+                    #     '%s/privateDemographics/results/multinli/clustering_y_1_min_samples_60_eps_0.45.npy' % root_dir
+                    # ]
+                    clustering_path = None
+            else:
                 clustering_path = [
-                    '%s/privateDemographics/results/civilcomments/clustering_y_0_min_samples_50_eps_0.35.npy' % root_dir,
-                    '%s/privateDemographics/results/civilcomments/clustering_y_1_min_samples_100_eps_0.50.npy' % root_dir
+                    '%s/privateDemographics/results/%s/clustering_y_0_min_samples_%d_eps_%.2f.npy' % (root_dir, dataset_name, min_samples, eps),
+                    '%s/privateDemographics/results/%s/clustering_y_1_min_samples_%d_eps_%.2f.npy' % (root_dir, dataset_name, min_samples, eps)
                 ]
-            elif dataset_name == 'waterbirds':
-                clustering_path = None
-            elif dataset_name == 'synthetic':
-                clustering_path = [
-                    '%s/privateDemographics/results/synthetic/clustering_y_0_min_samples_20_eps_0.40.npy' % root_dir,
-                    '%s/privateDemographics/results/synthetic/clustering_y_1_min_samples_60_eps_0.45.npy' % root_dir
-                ]
-            elif dataset_name == 'multinli':
-                # clustering_path = [
-                #     '%s/privateDemographics/results/multinli/clustering_y_0_min_samples_20_eps_0.40.npy' % root_dir,
-                #     '%s/privateDemographics/results/multinli/clustering_y_1_min_samples_60_eps_0.45.npy' % root_dir
-                # ]
-                clustering_path = None
 
         domain_loader = get_domain(
             m, 
@@ -1358,6 +1373,8 @@ def parse_args():
     parser.add_argument('--clustering_y', default = 0, type = int)
     parser.add_argument('--clustering_min_samples', default = 5, type = int)
     parser.add_argument('--clustering_eps', default = 0.1, type = float)
+    parser.add_argument('--best_clustering_parameter', default = 1, type = int, choices = [0,1])
+    parser.add_argument('--outlier_frac', default = 0.2, type = float)
 
     args = parser.parse_args()
 
@@ -1390,6 +1407,8 @@ def main():
     y = args.clustering_y
     min_samples = args.clustering_min_samples
     eps = args.clustering_eps
+    best_clustering_parameter = args.best_clustering_parameter
+    outlier_frac = args.outlier_frac
 
     if pred_groups_only:
         pred_groups(
@@ -1431,6 +1450,11 @@ def main():
             start_model_path,
             load_pred_dict,
             load_representations,
+            True,
+            best_clustering_parameter,
+            min_samples,
+            eps,
+            outlier_frac,
         )
 
 if __name__ == '__main__':

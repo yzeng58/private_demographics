@@ -28,4 +28,6 @@ __pycache__
 **/results
 **/data
 
+run_exp/submit.sh
+
 root_dir.py

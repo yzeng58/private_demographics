@@ -22,6 +22,150 @@ from sklearn.metrics.pairwise import cosine_distances
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 #########################################################
 
+def exp_init(
+    dataset_name,
+    batch_size,
+    target_var,
+    domain,
+    num_workers,
+    pin_memory,
+    task,
+    outlier,
+    load_representations,
+    start_model_path,
+    seed,
+    method,
+    device,
+):
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
+
+    if dataset_name == 'synthetic':
+        train_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv' % root_dir
+        val_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv' % root_dir
+        test_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv' % root_dir
+    elif dataset_name in ['waterbirds', 'civilcomments', 'multinli']:
+        train_path = '%s/balanceGroups/data/%s' % (root_dir, dataset_name)
+        val_path = None,
+        test_path = None,
+
+    device = torch.device(device)
+    loader, n, num_domain, num_class, num_feature = read_data(
+        train_path, 
+        val_path, 
+        test_path, 
+        batch_size,
+        target_var,
+        domain,
+        False,
+        device,
+        dataset_name,
+        0, 
+        num_workers,
+        pin_memory,
+        seed,
+        outlier,
+    )
+
+    if task == 'fairness':
+        num_group = num_domain * num_class
+    elif task == 'irm':
+        num_group = num_domain
+
+    loader['train_supp_iter'] = iter(loader['train_supp'])
+
+    if dataset_name == 'waterbirds':
+        loader, num_feature = get_representation(
+            'resnet50', 
+            'waterbirds',
+            num_class,
+            loader, 
+            device,
+            batch_size,
+            load_representations,
+        )
+       
+        num_feature = num_feature[0]
+        model = 'logreg'
+
+    elif dataset_name in ['civilcomments', 'multinli']:
+        model = 'bert'
+    
+    elif dataset_name in ['synthetic', 'compas']:
+        model = 'mlp'
+
+    m = load_model(
+        model = model,
+        num_feature = num_feature,
+        num_class = num_class,
+        seed = seed,
+    )
+
+    if start_model_path and method == 'grass':
+        try: 
+            m.load_state_dict(torch.load(start_model_path))
+        except RuntimeError: 
+            print('CUDA device not available. Skip...')
+
+    m.to(device)
+
+    if model == 'bert': 
+        optim = get_bert_optim(m, 1e-3, 1e-5)
+    elif model == 'resnet50':
+        optim = torch.optim.Adam(get_parameters(m, model), lr=1e-3, weight_decay=1e-5)
+    else:
+        optim = torch.optim.Adam(get_parameters(m, model), lr=1e-3, weight_decay=1e-5)
+    optim.zero_grad()
+    
+
+    if model == 'bert':
+        num_batches = len(loader['train'])
+        num_training_steps = 1 * num_batches
+        lr_scheduler = get_scheduler(
+            "linear",
+            optimizer = optim,
+            num_warmup_steps = 0,
+            num_training_steps = num_training_steps
+        )
+    else:
+        lr_scheduler = None
+
+    return [
+        m,
+        loader,
+        optim,
+        model,
+        num_domain,
+        num_group,
+        lr_scheduler,
+        device,
+        n,
+        num_feature,
+        num_class,
+    ]
+
+def remove_outliers(features, labels, domains, pred_domain):
+    clean_idx = pred_domain >= 0
+    return (
+        features[clean_idx], 
+        labels[clean_idx], 
+        domains[clean_idx], 
+        pred_domain[clean_idx]
+    )
+
+def get_pred_domain(domain_loader, mode):
+    try:
+        _, pred_domain = domain_loader['%s_iter' % mode].next()
+    except StopIteration:
+        domain_loader['%s_iter' % mode] = iter(domain_loader[mode])
+        _, pred_domain = domain_loader['%s_iter' % mode].next()
+    return pred_domain
+
 def collect_gradient(
     model,
     m,
@@ -110,7 +254,6 @@ def collect_gradient(
 
     return grad, true_domain, idx_class, true_group, idx_mode
 
-
 def grad_clustering_parallel(
     m,
     loader, 
@@ -126,6 +269,8 @@ def grad_clustering_parallel(
     min_samples,
     y,
     log_wandb,
+    outlier,
+    process_grad,
 ):      
     grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
         model,
@@ -147,7 +292,7 @@ def grad_clustering_parallel(
         try:
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_group_prediction' % dataset_name,
+                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
                 config = {'eps': eps, 'min_samples': min_samples},
                 job_type = 'y=%d' % y
             )
@@ -155,15 +300,16 @@ def grad_clustering_parallel(
             import wandb
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_group_prediction' % dataset_name,
+                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
                 config = {'eps': eps, 'min_samples': min_samples},
                 job_type = 'y=%d' % y
             )
 
     grad_y = grad[idx_class == y]
-    center = grad_y.mean(axis=0)
-    grad_y = grad_y - center
-    grad_y = normalize(grad_y)
+    if process_grad:
+        center = grad_y.mean(axis=0)
+        grad_y = grad_y - center
+        grad_y = normalize(grad_y)
 
     true_domain_y = true_domain[idx_class == y]
 
@@ -192,14 +338,19 @@ def grad_clustering_parallel(
         np.save(f, pred_domain_y)
 
     if log_wandb:
-        wandb.log({
+        group_stat = np.unique(pred_domain_y, return_counts = True)
+        wandb_log_dict = {
             'ars': ars,
             'nmi': nmi,
             'val': val,
             'eq': eq,
-        })
+            'outlier_proportion': (pred_domain_y == -1).mean(),
+            'max_proportion': group_stat[1].max()/group_stat[1].sum(),
+            'min_proportion': group_stat[1].min()/group_stat[1].sum(),
+            'num_subgroups': group_stat[0].shape[0],
+        }
+        wandb.log(wandb_log_dict)
         wandb.finish()
-
 
 def get_domain(
     m,
@@ -217,10 +368,12 @@ def get_domain(
     lr_scheduler,
     load_pred_dict,
     clustering_path,
+    outlier,
+    process_grad,
 ):
     if load_pred_dict: 
         folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-        file_name = os.path.join(folder_name, 'pred_dict.json')
+        file_name = os.path.join(folder_name, 'pred_dict_outlier_%s.json' % outlier)
         with open(file_name, 'r') as f:
             pred_dict = json.load(f)
 
@@ -248,15 +401,24 @@ def get_domain(
         if clustering_path:
             for y in range(num_class):
                 with open(clustering_path[y], 'rb') as f:
-                    pred_domain[idx_class == y] = np.load(f) + num_group + 1
-                num_group = len(np.unique(pred_domain))
+                    dbscan_labels = np.load(f)
+
+                idx = idx_class == y
+                idx[idx] = dbscan_labels >= 0
+                pred_domain[idx] = dbscan_labels[dbscan_labels >= 0] + num_group
+
+                idx = idx_class == y
+                idx[idx] = dbscan_labels < 0
+                pred_domain[idx] = -1
+                num_group = len(np.unique(pred_domain)) - int(-1 in pred_domain)
 
         else:
             for y in range(num_class):
                 grad_y = grad[idx_class == y]
-                center = grad_y.mean(axis=0)
-                grad_y = grad_y - center
-                grad_y = normalize(grad_y)
+                if process_grad:
+                    center = grad_y.mean(axis=0)
+                    grad_y = grad_y - center
+                    grad_y = normalize(grad_y)
                 dist = cosine_dist(grad_y, grad_y)
 
                 clusterings, arss, nmis, ious, ious2 = [], [], [], [], []
@@ -305,7 +467,14 @@ def get_domain(
                                 best_mean = val
                                 best_dbscan_params['eps'] = eps
                                 best_dbscan_params['min_samples'] = min_samples
-                                pred_domain[idx_class == y] = dbscan.labels_ + num_group + 1
+
+                                idx = idx_class == y
+                                idx[idx] = dbscan.labels_ >= 0
+                                pred_domain[idx] = dbscan.labels_[dbscan.labels_ >= 0] + num_group
+                                # detect the outliers
+                                idx = idx_class == y
+                                idx[idx] = dbscan.labels_ < 0
+                                pred_domain[idx] = -1
                 
                         print('\n')
                 
@@ -313,7 +482,7 @@ def get_domain(
                     dbs_mat.append(dbs_row)
                     sil_mat.append(sil_row)
 
-                num_group = len(np.unique(pred_domain))
+                num_group = len(np.unique(pred_domain)) - int(-1 in pred_domain)
         
                 print(50 *'-')
                 print('DBSCAN: best ARS', max(arss), 'best NMI', max(nmis))
@@ -353,7 +522,7 @@ def get_domain(
                 pred_dict['n_%s' % mode].append(int(group.sum()))
 
         folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-        file_name = os.path.join(folder_name, 'pred_dict.json')
+        file_name = os.path.join(folder_name, 'pred_dict_outlier_%s.json' % outlier)
 
         with open(file_name, 'w') as f:
             json.dump(pred_dict, f)          
@@ -378,7 +547,6 @@ def get_domain(
         },
     }
         
-
 def compute_ay(group_idx, num_domain):
     a = group_idx % num_domain
     y = group_idx // num_domain
@@ -613,11 +781,13 @@ def run_epoch(
     elif method == 'grass':
         results = {'q': q}
         for _, features, labels, domains in tqdm_object:
-            try:
-                _, pred_domain = domain_loader['train_iter'].next()
-            except StopIteration:
-                domain_loader['train_iter'] = iter(domain_loader['train'])
-                _, pred_domain = domain_loader['train_iter'].next()
+            pred_domain = get_pred_domain(domain_loader, 'train')
+            features, labels, domains, pred_domain = remove_outliers(
+                features,
+                labels,
+                domains,
+                pred_domain,
+            )
 
             results = gradient_descent(
                 model,
@@ -677,102 +847,36 @@ def pred_groups(
     start_model_path = None,
     load_representations = True,
     log_wandb = False,
+    outlier = False,
+    process_grad = True,
 ):
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.enabled = False
-
-    if dataset_name == 'synthetic':
-        train_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv' % root_dir
-        val_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv' % root_dir
-        test_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv' % root_dir
-    elif dataset_name in ['waterbirds', 'civilcomments', 'multinli']:
-        train_path = '%s/balanceGroups/data/%s' % (root_dir, dataset_name)
-        val_path = None,
-        test_path = None,
-
-    device = torch.device(device)
-    loader, n, num_domain, num_class, num_feature = read_data(
-        train_path, 
-        val_path, 
-        test_path, 
+    [
+        m,
+        loader,
+        optim,
+        model,
+        num_domain,
+        num_group,
+        lr_scheduler,
+        device,
+        n,
+        num_feature,
+        num_class,
+    ] = exp_init(
+        dataset_name,
         batch_size,
         target_var,
         domain,
-        False,
-        device,
-        dataset_name,
-        0, 
         num_workers,
         pin_memory,
+        task,
+        outlier,
+        load_representations,
+        start_model_path,
         seed,
+        'grass',
+        device,
     )
-
-    if task == 'fairness':
-        num_group = num_domain * num_class
-    elif task == 'irm':
-        num_group = num_domain
-
-    loader['train_supp_iter'] = iter(loader['train_supp'])
-
-    if dataset_name == 'waterbirds':
-        loader, num_feature = get_representation(
-            'resnet50', 
-            'waterbirds',
-            num_class,
-            loader, 
-            device,
-            batch_size,
-            load_representations,
-        )
-       
-        num_feature = num_feature[0]
-        model = 'logreg'
-
-    elif dataset_name in ['civilcomments', 'multinli']:
-        model = 'bert'
-    
-    elif dataset_name == 'synthetic':
-        model = 'mlp'
-
-    m = load_model(
-        model = model,
-        num_feature = num_feature,
-        num_class = num_class,
-        seed = seed,
-    )
-
-    try: 
-        m.load_state_dict(torch.load(start_model_path))
-    except RuntimeError: 
-        print('CUDA device not available. Skip...')
-
-    m.to(device)
-
-    if model == 'bert': 
-        optim = get_bert_optim(m, 1e-3, 1e-5)
-    elif model == 'resnet50':
-        optim = torch.optim.Adam(get_parameters(m, model), lr=1e-3, weight_decay=1e-5)
-    else:
-        optim = torch.optim.Adam(get_parameters(m, model), lr=1e-3, weight_decay=1e-5)
-    optim.zero_grad()
-    
-
-    if model == 'bert':
-        num_batches = len(loader['train'])
-        num_training_steps = 1 * num_batches
-        lr_scheduler = get_scheduler(
-            "linear",
-            optimizer = optim,
-            num_warmup_steps = 0,
-            num_training_steps = num_training_steps
-        )
-    else:
-        lr_scheduler = None
 
     grad_clustering_parallel(
         m,
@@ -789,6 +893,8 @@ def pred_groups(
         min_samples,
         y,
         log_wandb,
+        outlier,
+        process_grad,
     )
 
 def run_exp(
@@ -813,53 +919,43 @@ def run_exp(
     load_pred_dict = True,
     load_representations = True,
     clustering_path_use = True,
+    outlier = False,
+    process_grad = True,
     best_clustering_parameter = True,
     min_samples = None,
     eps = None,
     outlier_frac = 0.2,
 ):
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.enabled = False
 
-    if dataset_name == 'synthetic':
-        train_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv' % root_dir
-        val_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv' % root_dir
-        test_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv' % root_dir
-    elif dataset_name in ['waterbirds', 'civilcomments', 'multinli']:
-        train_path = '%s/balanceGroups/data/%s' % (root_dir, dataset_name)
-        val_path = None,
-        test_path = None,
-
-    device = torch.device(device)
-    loader, n, num_domain, num_class, num_feature = read_data(
-        train_path, 
-        val_path, 
-        test_path, 
+    [   
+        m,
+        loader,
+        optim,
+        model,
+        num_domain,
+        num_group,
+        lr_scheduler,
+        device,
+        n,
+        num_feature,
+        num_class,
+     ] = exp_init(
+        dataset_name,
         batch_size,
         target_var,
         domain,
-        subsample,
-        device,
-        dataset_name,
-        0, 
         num_workers,
         pin_memory,
+        task,
+        outlier,
+        load_representations,
+        start_model_path,
         seed,
+        method,
+        device,
     )
 
     domain_loader = None
-
-    if task == 'fairness':
-        num_group = num_domain * num_class
-    elif task == 'irm':
-        num_group = num_domain
-
-    loader['train_supp_iter'] = iter(loader['train_supp'])
     error_code = 0
     params = {
         'erm': {
@@ -867,18 +963,21 @@ def run_exp(
             'batch_size': batch_size,
             'lr': lr,
             'subsample': subsample,
+            'outlier': outlier,
         },
         'grass': {
             'num_epoch': num_epoch,
             'batch_size': batch_size,
             'lr_q': lr_q,
             'lr': lr,
+            'outlier': outlier,
         },
         'robust_dro': {
             'num_epoch': num_epoch,
             'batch_size': batch_size,
             'lr_q': lr_q,
             'lr': lr,
+            'outlier': outlier,
         },
         'doro': {
             'num_epoch': num_epoch,
@@ -915,62 +1014,10 @@ def run_exp(
                 job_type = job_type,
             )  
 
-    if dataset_name == 'waterbirds':
-        loader, num_feature = get_representation(
-            'resnet50', 
-            'waterbirds',
-            num_class,
-            loader, 
-            device,
-            batch_size,
-            load_representations,
-        )
-       
-        num_feature = num_feature[0]
-        model = 'logreg'
-
-    elif dataset_name in ['civilcomments', 'multinli']:
-        model = 'bert'
-    
-    elif dataset_name == 'synthetic':
-        model = 'mlp'
-
-    m = load_model(
-        model = model,
-        num_feature = num_feature,
-        num_class = num_class,
-        seed = seed,
-    )
-
-    if start_model_path and method == 'grass':
-        try:
-            m.load_state_dict(torch.load(start_model_path))
-        except RuntimeError:
-            print('CUDA not available! Skip...')
-
     best_criterion = torch.tensor(0., device = device)
     selected_epoch, lr_scheduler = 0, None
 
-    m.to(device)
     best_m = deepcopy(m)
-
-    if model == 'bert': 
-        optim = get_bert_optim(m, lr, weight_decay)
-    elif model == 'resnet50':
-        optim = torch.optim.Adam(get_parameters(m, model), lr=lr, weight_decay=weight_decay)
-    else:
-        optim = torch.optim.Adam(get_parameters(m, model), lr=lr, weight_decay=weight_decay)
-    optim.zero_grad()
-    
-    if model == 'bert':
-        num_batches = len(loader['train'])
-        num_training_steps = num_epoch * num_batches
-        lr_scheduler = get_scheduler(
-            "linear",
-            optimizer = optim,
-            num_warmup_steps = 0,
-            num_training_steps = num_training_steps
-        )
 
     data_json = defaultdict(list)
     if method == 'grass':
@@ -1017,6 +1064,8 @@ def run_exp(
             lr_scheduler,
             load_pred_dict,
             clustering_path,
+            outlier,
+            process_grad,
         )
 
         domain_loader['train_iter'] = iter(domain_loader['train'])
@@ -1206,13 +1255,9 @@ def inference(
     for _, features, labels, domains in loader[mode]:
         features, labels, domains = features.to(device), labels.to(device), domains.to(device)
         if mode in ['train', 'val'] and domain_loader:
-            try:
-                _, pred_domains = domain_loader['%s_iter' % mode].next()
-            except StopIteration:
-                domain_loader['%s_iter' % mode] = iter(domain_loader[mode])
-                _, pred_domains = domain_loader['%s_iter' % mode].next()
+            pred_domains = get_pred_domain(domain_loader, mode)
             pred_domains = pred_domains.to(device)
-
+            
         output = m(features)
 
         if len(output) == 2:
@@ -1373,6 +1418,8 @@ def parse_args():
     parser.add_argument('--clustering_y', default = 0, type = int)
     parser.add_argument('--clustering_min_samples', default = 5, type = int)
     parser.add_argument('--clustering_eps', default = 0.1, type = float)
+    parser.add_argument('--outlier', default = 0, type = int, choices = [0,1])
+    parser.add_argument('--process_grad', default = 1, type = int, choices = [0,1])
     parser.add_argument('--best_clustering_parameter', default = 1, type = int, choices = [0,1])
     parser.add_argument('--outlier_frac', default = 0.2, type = float)
 
@@ -1407,6 +1454,8 @@ def main():
     y = args.clustering_y
     min_samples = args.clustering_min_samples
     eps = args.clustering_eps
+    outlier = args.outlier
+    process_grad = args.process_grad
     best_clustering_parameter = args.best_clustering_parameter
     outlier_frac = args.outlier_frac
 
@@ -1427,6 +1476,8 @@ def main():
             start_model_path,
             load_representations,
             log_wandb,
+            outlier,
+            process_grad,
         )
     else:
         run_exp(
@@ -1450,7 +1501,9 @@ def main():
             start_model_path,
             load_pred_dict,
             load_representations,
-            True,
+            False,
+            outlier,
+            process_grad,
             best_clustering_parameter,
             min_samples,
             eps,

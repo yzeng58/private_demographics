@@ -55,7 +55,6 @@ def main(args):
         num_cores = 2
 
         param_grid = {
-            ' -a ': 'grass',
             ' --batch_size ': 128,
             ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
             ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100],
@@ -75,7 +74,6 @@ def main(args):
         num_cores = 2
 
         param_grid = {
-            ' -a ': 'grass',
             ' --batch_size ': 128,
             ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
             ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100],
@@ -107,7 +105,8 @@ def main(args):
         ' --start_model_path ' + start_model_path +\
         ' --outlier ' + str(outlier) +\
         ' --best_clustering_parameter ' + '0' +\
-        ' --wandb_group_name ' + '%s_vis_acc' % dataset
+        ' --wandb_group_name ' + '%s_vis_acc' % dataset +\
+        ' --clustering_path_use ' + '1'
 
     cmd_list = [cmd_pre]
     
@@ -120,7 +119,7 @@ def main(args):
         else:
             cmd_list = list(map(lambda x: x+param+str(param_grid[param]), cmd_list))
     
-    get_exp_name = lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[17]
+    get_exp_name = lambda job_cmd: job_cmd.split(' ')[7] + '_' + job_cmd.split(' ')[21]
 
     # print(cmd_list[0]
     submit_jobs(

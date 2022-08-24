@@ -1420,6 +1420,7 @@ def parse_args():
     parser.add_argument("--start_model_path", default = '', type = str)
     parser.add_argument("--load_pred_dict", default = 1, type = int, choices = [0,1])
     parser.add_argument("--load_representations", default = 1, type = int, choices = [0,1])
+    parser.add_argument("--clustering_path_use", default = 0, type = int, choices = [0,1])
     parser.add_argument('--clustering_y', default = 0, type = int)
     parser.add_argument('--clustering_min_samples', default = 5, type = int)
     parser.add_argument('--clustering_eps', default = 0.1, type = float)
@@ -1455,6 +1456,7 @@ def main():
     start_model_path = args.start_model_path
     load_pred_dict = args.load_pred_dict
     load_representations = args.load_representations
+    clustering_path_use = args.clustering_path_use
     pred_groups_only = args.pred_groups
     y = args.clustering_y
     min_samples = args.clustering_min_samples
@@ -1506,7 +1508,7 @@ def main():
             start_model_path,
             load_pred_dict,
             load_representations,
-            False,
+            clustering_path_use,
             outlier,
             process_grad,
             best_clustering_parameter,

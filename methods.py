@@ -178,6 +178,7 @@ def collect_gradient(
     lr_q,
     lr_scheduler,
     dataset_name,
+    n,
 ):
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     try:
@@ -207,8 +208,10 @@ def collect_gradient(
             lr_q,
             None,
             1,
+            n,
             lr_scheduler,
             domain_loader = None,
+            outlier_frac = None,
         )
     
         grad, true_domain, idx_mode, idx_class = [], [], [], []
@@ -271,6 +274,7 @@ def grad_clustering_parallel(
     log_wandb,
     outlier,
     process_grad,
+    n,
 ):      
     grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
         model,
@@ -284,6 +288,7 @@ def grad_clustering_parallel(
         1e-3,
         lr_scheduler,
         dataset_name,
+        n,
     )
 
     num_group = 0
@@ -370,6 +375,7 @@ def get_domain(
     clustering_path,
     outlier,
     process_grad,
+    n,
 ):
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     if load_pred_dict: 
@@ -393,6 +399,7 @@ def get_domain(
             lr_q,
             lr_scheduler,
             dataset_name,
+            n,
         )
 
         pred_domain = np.zeros(true_domain.shape)
@@ -686,11 +693,13 @@ def gradient_descent(
     num_group,
     task,
     lr_q,
+    n,
     keep_grad = False,
     diff_f = None,
     mode = 'standard',
     q = None,
     lr_scheduler = None,
+    outlier_frac = 0.2,
 ):
     features, labels, domains = features.to(device), labels.to(device), domains.to(device)
     output = m(features)
@@ -719,6 +728,16 @@ def gradient_descent(
             loss_g,
         )
         loss = loss_g @ q
+    elif mode in ['doro']:
+        batch_size = len(labels)
+        gamma = outlier_frac +  n['train'].min() * (1-outlier_frac)
+
+        loss = F.cross_entropy(output, labels, reduction = 'none')
+        rk = torch.argsort(loss, descending=True) # rank the loss
+        n1 = int(gamma * batch_size) # to balance the groups
+        n2 = int(outlier_frac * batch_size) # to be removed
+
+        loss = loss[rk[n2:n1]].sum() / outlier_frac / (batch_size - n2)
 
     optim.zero_grad()
     loss.backward() 
@@ -755,8 +774,10 @@ def run_epoch(
     lr_q,
     q,
     epoch,
+    n,
     lr_scheduler,
     domain_loader = None,
+    outlier_frac = 0.2,
 ):
     m.train()
     tqdm_object = tqdm(loader['train'], total=len(loader['train']), desc=f"Epoch: {epoch + 1}")
@@ -775,11 +796,13 @@ def run_epoch(
                 num_group,
                 task,
                 lr_q,
+                n,
                 False,
                 None,
                 'standard',
                 q,
                 lr_scheduler,
+                None,
             )
             
 
@@ -806,17 +829,18 @@ def run_epoch(
                 domain_loader['num_group'],
                 task,
                 lr_q,
+                n,
                 False,
                 None,
                 'grass',
                 results['q'], 
                 lr_scheduler,
+                None,
             )
     
     elif method == 'robust_dro':
         results = {'q': q}
         for _, features, labels, domains in tqdm_object:
-
             results = gradient_descent(
                 model,
                 features,
@@ -829,11 +853,36 @@ def run_epoch(
                 num_group,
                 task,
                 lr_q,
+                n,
                 False,
                 None,
                 'robust_dro',
                 results['q'], 
                 lr_scheduler,
+                None,
+            )
+
+    elif method == 'doro':
+        for _, features, labels, domains in tqdm_object:
+            results = gradient_descent(
+                model,
+                features,
+                labels,
+                domains,
+                m,
+                optim,
+                device,
+                num_domain,
+                num_group,
+                task,
+                lr_q,
+                n,
+                False,
+                None,
+                'doro',
+                q,
+                lr_scheduler,
+                outlier_frac,
             )
 
 def pred_groups(
@@ -900,6 +949,7 @@ def pred_groups(
         log_wandb,
         outlier,
         process_grad,
+        n,
     )
 
 def run_exp(
@@ -1076,6 +1126,7 @@ def run_exp(
             clustering_path,
             outlier,
             process_grad,
+            n,
         )
 
         domain_loader['train_iter'] = iter(domain_loader['train'])
@@ -1101,8 +1152,10 @@ def run_exp(
             lr_q,
             q,
             epoch,
+            n,
             lr_scheduler,
             domain_loader,
+            outlier_frac,
         )
         
         try:

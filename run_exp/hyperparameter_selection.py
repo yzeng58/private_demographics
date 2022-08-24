@@ -84,6 +84,14 @@ def main():
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
+            'doro': {
+                ' --epoch ': 360,
+                ' --batch_size ': 128,
+                ' --outlier_frac ': 0.2,
+                ' --minimal_group_frac ': 0.5,
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            }
         }
 
     elif dataset == 'civilcomments':

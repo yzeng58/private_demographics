@@ -208,10 +208,10 @@ def collect_gradient(
             lr_q,
             None,
             1,
-            n,
             lr_scheduler,
             domain_loader = None,
             outlier_frac = None,
+            minimal_group_frac = None,
         )
     
         grad, true_domain, idx_mode, idx_class = [], [], [], []
@@ -693,7 +693,7 @@ def gradient_descent(
     num_group,
     task,
     lr_q,
-    n,
+    minimal_group_frac = 0.5,
     keep_grad = False,
     diff_f = None,
     mode = 'standard',
@@ -730,7 +730,7 @@ def gradient_descent(
         loss = loss_g @ q
     elif mode in ['doro']:
         batch_size = len(labels)
-        gamma = outlier_frac +  n['train'].min() * (1-outlier_frac)
+        gamma = outlier_frac +  minimal_group_frac * (1-outlier_frac)
 
         loss = F.cross_entropy(output, labels, reduction = 'none')
         rk = torch.argsort(loss, descending=True) # rank the loss
@@ -774,10 +774,10 @@ def run_epoch(
     lr_q,
     q,
     epoch,
-    n,
     lr_scheduler,
     domain_loader = None,
     outlier_frac = 0.2,
+    minimal_group_frac = 0.5,
 ):
     m.train()
     tqdm_object = tqdm(loader['train'], total=len(loader['train']), desc=f"Epoch: {epoch + 1}")
@@ -796,7 +796,7 @@ def run_epoch(
                 num_group,
                 task,
                 lr_q,
-                n,
+                None,
                 False,
                 None,
                 'standard',
@@ -829,7 +829,7 @@ def run_epoch(
                 domain_loader['num_group'],
                 task,
                 lr_q,
-                n,
+                None,
                 False,
                 None,
                 'grass',
@@ -853,7 +853,7 @@ def run_epoch(
                 num_group,
                 task,
                 lr_q,
-                n,
+                None,
                 False,
                 None,
                 'robust_dro',
@@ -876,7 +876,7 @@ def run_epoch(
                 num_group,
                 task,
                 lr_q,
-                n,
+                minimal_group_frac,
                 False,
                 None,
                 'doro',
@@ -980,6 +980,7 @@ def run_exp(
     min_samples = None,
     eps = None,
     outlier_frac = 0.2,
+    minimal_group_frac = 0.5,
 ):
 
     [   
@@ -1152,10 +1153,10 @@ def run_exp(
             lr_q,
             q,
             epoch,
-            n,
             lr_scheduler,
             domain_loader,
             outlier_frac,
+            minimal_group_frac,
         )
         
         try:
@@ -1486,6 +1487,7 @@ def parse_args():
     parser.add_argument('--process_grad', default = 1, type = int, choices = [0,1])
     parser.add_argument('--best_clustering_parameter', default = 1, type = int, choices = [0,1])
     parser.add_argument('--outlier_frac', default = 0.2, type = float)
+    parser.add_argument('--minimal_group_frac', default = 0.5, type = float)
 
     args = parser.parse_args()
 
@@ -1523,6 +1525,7 @@ def main():
     process_grad = args.process_grad
     best_clustering_parameter = args.best_clustering_parameter
     outlier_frac = args.outlier_frac
+    minimal_group_frac = args.minimal_group_frac
 
     if pred_groups_only:
         pred_groups(
@@ -1573,6 +1576,7 @@ def main():
             min_samples,
             eps,
             outlier_frac,
+            minimal_group_frac,
         )
 
 if __name__ == '__main__':

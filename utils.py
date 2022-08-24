@@ -166,11 +166,9 @@ def domain_class_idx(g, num_domain):
     y = g // num_domain
     return a, y
 
-
 def cosine_dist(X1, X2):
     dist = 1 - X1 @ X2.T
     return np.maximum(dist, 0.)
-
 
 def e_dist(A, B, cosine=False, eps=1e-10):
     ## I don't use this function - it is for pairwise Euclidean mostly
@@ -182,7 +180,6 @@ def e_dist(A, B, cosine=False, eps=1e-10):
         return 1 - inner / (np.sqrt(A_n * B_n) + eps)
     else:
         return np.maximum(0., A_n - 2 * inner + B_n)
-
 
 def get_dist_hist(X1, X2):
     dist = cosine_dist(X1, X2)
@@ -201,7 +198,6 @@ def get_dist_hist(X1, X2):
 
     return dist
 
-
 def iou_compute(idx1, idx2):
     # proportion of true points that are in the predicted group
     inter = len(np.intersect1d(idx1, idx2))
@@ -211,7 +207,6 @@ def iou_compute(idx1, idx2):
     # proportion of predicted points that are in the true group
     # proportion of true points that are in the predicted group
     return inter / max(len(idx1), 1), inter / len(idx2) if len(idx2) != 0 else 0
-
 
 def iou_stat(label_true, label_pred):
     # Outliers
@@ -226,7 +221,6 @@ def iou_stat(label_true, label_pred):
     min_true, min_pred = np.where(label_true == 1)[0], np.where(label_pred > 0)[0]
     min_iou, _ = iou_compute(min_true, min_pred)
     return [out_iou, maj_iou, min_iou]
-
 
 def iou_adaptive(label_true, label_pred, return_map=False):
     best_avg_iou = np.array([0, 0, 0])
@@ -291,13 +285,11 @@ def iou_adaptive(label_true, label_pred, return_map=False):
     else:
         return best_avg_iou, best_avg_iou2, best_avg_inds == best_avg_inds2, best_avg_inds, best_avg_inds2
 
-
 def internal_evals(X, distance_mat, labels):
   chi = calinski_harabasz_score(X, labels)
   dbs = davies_bouldin_score(X, labels)
   sil = silhouette_score(distance_mat, labels, metric="precomputed")
   return chi, dbs, sil
-
 
 def plot_data(data, labels, title=None):
   fig = plt.figure()
@@ -342,7 +334,6 @@ def plot_pairwise_distances(grads, groups):
             axes[i, j].hist(dist_ij, bins, density=1)
     plt.show()
 
-
 def cluster_metrics(labels, groups):
   print('Cluster counts', Counter(labels))
   ars = ARS(groups, labels)
@@ -354,7 +345,6 @@ def cluster_metrics(labels, groups):
   min_true = np.where(groups==1)[0]
   for i in np.unique(labels):
       print(i, 'Minority IOU:', iou_compute(min_true, np.where(labels==i)[0]))
-
 
 def load_class_data(classi, epoch, base_folder):
   data_subset = "train"
@@ -392,7 +382,6 @@ def load_class_data(classi, epoch, base_folder):
 
   dist = cosine_dist(grads, grads)
   return dist, grads, groups, all_i
-
 
 def cluster_and_extract(eps, ms, modelname, epoch, in_dir, out_dir):
     dfc = pd.DataFrame({'idx': np.load(in_dir + 'test_data_i_resnet_' + modelname + '.npy'),

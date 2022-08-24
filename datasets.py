@@ -12,7 +12,6 @@ sys.path.insert(1, '%s/noHarmFairness/references/BalancingGroups/branches' % roo
 from clean_up.datasets import get_loaders
 from utils import group_idx
 
-
 def dataGen(
     n_list = np.ones(3) * 100,
     seed = 123, 

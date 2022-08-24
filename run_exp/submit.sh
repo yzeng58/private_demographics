@@ -35,4 +35,5 @@
 # python clustering_parameter_selection.py -p 0 -d waterbirds 
 # python clustering_parameter_selection.py -p 0 -d compas
 
-python acc_clustering_vis.py -d waterbirds
+# python acc_clustering_vis.py -d waterbirds
+python acc_clustering_vis.py -d compas

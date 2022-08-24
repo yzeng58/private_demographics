@@ -49,7 +49,7 @@ def exp_init(
         train_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv' % root_dir
         val_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv' % root_dir
         test_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv' % root_dir
-    elif dataset_name in ['waterbirds', 'civilcomments', 'multinli']:
+    elif dataset_name in ['waterbirds', 'civilcomments', 'multinli', 'compas']:
         train_path = '%s/balanceGroups/data/%s' % (root_dir, dataset_name)
         val_path = None,
         test_path = None,

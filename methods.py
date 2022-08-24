@@ -1047,6 +1047,11 @@ def run_exp(
                     '%s/privateDemographics/results/%s/clustering_y_0_min_samples_%d_eps_%.2f.npy' % (root_dir, dataset_name, min_samples, eps),
                     '%s/privateDemographics/results/%s/clustering_y_1_min_samples_%d_eps_%.2f.npy' % (root_dir, dataset_name, min_samples, eps)
                 ]
+                if log_wandb:
+                    wandb.log({
+                        'eps': eps,
+                        'min_samples': min_samples,
+                    })
 
         domain_loader = get_domain(
             m, 

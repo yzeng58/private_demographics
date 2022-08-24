@@ -1,4 +1,6 @@
-root_dir = '/Users/zengyuchen/research/IBM/dccstore/storage'
+import sys
+sys.path.insert(1, '..')
+from root_dir import *
 
 algs = [
     'erm',

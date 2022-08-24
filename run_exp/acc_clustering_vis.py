@@ -106,7 +106,8 @@ def main(args):
         ' --outlier ' + str(outlier) +\
         ' --best_clustering_parameter ' + '0' +\
         ' --wandb_group_name ' + '%s_vis_acc' % dataset +\
-        ' --clustering_path_use ' + '1'
+        ' --clustering_path_use ' + '1' +\
+        ' --load_pred_dict ' + '0'
 
     cmd_list = [cmd_pre]
     
@@ -119,7 +120,7 @@ def main(args):
         else:
             cmd_list = list(map(lambda x: x+param+str(param_grid[param]), cmd_list))
     
-    get_exp_name = lambda job_cmd: job_cmd.split(' ')[7] + '_' + job_cmd.split(' ')[21]
+    get_exp_name = lambda job_cmd: job_cmd.split(' ')[7] + '_' + job_cmd.split(' ')[23]
 
     # print(cmd_list[0]
     submit_jobs(

@@ -371,8 +371,8 @@ def get_domain(
     outlier,
     process_grad,
 ):
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     if load_pred_dict: 
-        folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
         file_name = os.path.join(folder_name, 'pred_dict_outlier_%s.json' % outlier)
         with open(file_name, 'r') as f:
             pred_dict = json.load(f)
@@ -475,7 +475,12 @@ def get_domain(
                                 idx = idx_class == y
                                 idx[idx] = dbscan.labels_ < 0
                                 pred_domain[idx] = -1
-                
+
+                        file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
+                            y, min_samples, eps,
+                        ))
+                        with open(file_name, 'wb') as f:
+                            np.save(f, dbscan.labels_)
                         print('\n')
                 
                     chi_mat.append(chi_row)

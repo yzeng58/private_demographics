@@ -100,6 +100,7 @@ def main(args):
 
     cmd_pre = 'python' +\
         ' %s/privateDemographics/methods.py' % root_dir +\
+        ' -a ' + 'grass' +\
         ' -g ' + '0' +\
         ' -d ' + dataset +\
         ' --device ' + device +\
@@ -121,7 +122,7 @@ def main(args):
     
     get_exp_name = lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[17]
 
-    # print(cmd_list[0])
+    # print(cmd_list[0]
     submit_jobs(
         cmd_list, 
         '%s/privateDemographics/log_ccc' % root_dir, 

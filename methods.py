@@ -737,7 +737,7 @@ def gradient_descent(
         n1 = int(gamma * batch_size) # to balance the groups
         n2 = int(outlier_frac * batch_size) # to be removed
 
-        loss = loss[rk[n2:n1]].sum() / outlier_frac / (batch_size - n2)
+        loss = loss[rk[n2:n1]].sum() / minimal_group_frac / (batch_size - n2)
 
     optim.zero_grad()
     loss.backward() 

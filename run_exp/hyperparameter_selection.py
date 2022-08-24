@@ -11,11 +11,11 @@ def parse_args():
     parser.add_argument('--wandb_group_name', default = '', type = str)
     parser.add_argument('--outlier', default = 0, type = int, choices = [0,1])
     parser.add_argument('--process_grad', default = 1, type = int, choices = [0,1])
+    parser.add_argument('--run', default = 1, type = int, choices = [0,1])
     args = parser.parse_args()
     return args
 
-def main():
-    args = parse_args()
+def main(args):
 
     dataset = args.dataset
     method = args.algorithm
@@ -206,18 +206,21 @@ def main():
             cmd_list = cmd_pool
         else:
             cmd_list = list(map(lambda x: x+param+str(param_grid[method][param]), cmd_list))
-        
-    # print(cmd_list[0])
-    submit_jobs(
-        cmd_list, 
-        '%s/privateDemographics/log_ccc' % root_dir , 
-        queue, 
-        lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[3],
-        'privateDemographics',
-        cores,
-        mem,
-    )    
+
+    if args.run:    
+        submit_jobs(
+            cmd_list, 
+            '%s/privateDemographics/log_ccc' % root_dir , 
+            queue, 
+            lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[3],
+            'privateDemographics',
+            cores,
+            mem,
+        ) 
+    else:
+        print(cmd_list[0])   
 
 if __name__ == '__main__':
-    main()
+    args = parse_args()
+    main(args)
     

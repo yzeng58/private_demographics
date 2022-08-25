@@ -87,10 +87,10 @@ def main(args):
             'cvar_doro': {
                 ' --epoch ': 360,
                 ' --batch_size ': 128,
-                ' --outlier_frac ': 0.2,
-                ' --minimal_group_frac ': 0.5,
-                ' --lr ': [1e-5, 1e-4, 1e-3],
-                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --outlier_frac ': [0.005, 0.01, 0.02, 0.1, 0.2],
+                ' --minimal_group_frac ': [0.1, 0.2, 0.5],
+                ' --lr ': [1e-5, 1e-4],
+                ' --weight_decay ': [1e-1, 1],
             }
         }
 

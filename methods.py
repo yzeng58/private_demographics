@@ -728,7 +728,7 @@ def gradient_descent(
             loss_g,
         )
         loss = loss_g @ q
-    elif mode in ['doro']:
+    elif mode in ['cvar_doro']:
         batch_size = len(labels)
         gamma = outlier_frac +  minimal_group_frac * (1-outlier_frac)
 
@@ -862,7 +862,7 @@ def run_epoch(
                 None,
             )
 
-    elif method == 'doro':
+    elif method == 'cvar_doro':
         for _, features, labels, domains in tqdm_object:
             results = gradient_descent(
                 model,
@@ -879,7 +879,7 @@ def run_epoch(
                 minimal_group_frac,
                 False,
                 None,
-                'doro',
+                'cvar_doro',
                 q,
                 lr_scheduler,
                 outlier_frac,
@@ -1035,7 +1035,7 @@ def run_exp(
             'lr': lr,
             'outlier': outlier,
         },
-        'doro': {
+        'cvar_doro': {
             'num_epoch': num_epoch,
             'batch_size': batch_size,
             'outlier_frac': outlier_frac,

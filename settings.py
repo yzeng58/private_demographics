@@ -4,7 +4,7 @@ algs = [
     'erm',
     'grass',
     'robust_dro',
-    'doro',
+    'cvar_doro',
 ]
 
 tasks = [
@@ -35,23 +35,3 @@ optimizers = [
     'adam',
 ]
 
-params = {
-        'sgd': [
-            'm',
-            'num_epoch',
-            'batch_size',
-            'lr',
-            'optimizer',
-            'subsample',
-            'weight_decay',
-        ],
-        'robust_dro': [
-            'm',
-            'num_epoch',
-            'batch_size',
-            'lr_q',
-            'lr_w',
-            'optimizer',
-            'weight_decay',
-        ],
-    }

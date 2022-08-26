@@ -108,7 +108,7 @@ def exp_init(
         seed = seed,
     )
 
-    if start_model_path and method == 'grass':
+    if start_model_path and method in ['grass', 'eiil']:
         try: 
             m.load_state_dict(torch.load(start_model_path))
         except RuntimeError: 

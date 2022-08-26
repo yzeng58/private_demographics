@@ -1176,6 +1176,8 @@ def run_exp(
             'num_epoch': num_epoch,
             'batch_size': batch_size,
             'lr': lr,
+            'lr_ei': lr_ei,
+            'epoch_ei': epoch_ei,
         }
     }
 

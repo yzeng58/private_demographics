@@ -77,6 +77,16 @@ def main(args):
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
+            'eiil': {
+                ' --epoch ': 360,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.01, .1],
+                ' --lr ': [1e-5, 1e-4],
+                ' --lr_ei ': [1e-4, 1e-3],
+                ' --epoch_ei ': 100,
+                ' --weight_decay ': [1e-3, 1e-2],
+                ' --load_pred_dict ': 0,
+            },
             'robust_dro': {
                 ' --epoch ': 360,
                 ' --batch_size ': 128,
@@ -188,7 +198,17 @@ def main(args):
                 ' --minimal_group_frac ': 0.5,
                 ' --lr ': [2e-5, 2e-4, 2e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2],
-            }
+            },
+            'eiil': {
+                ' --epoch ': 300,
+                ' --batch_size ': 128,
+                ' --lr_q ': .01,
+                ' --lr ': [2e-3, 2e-4],
+                ' --lr_ei ': [1e-4, 1e-3],
+                ' --epoch_ei ': 100,
+                ' --weight_decay ': [1e-3, 1e-4],
+                ' --load_pred_dict ': 0,
+            },
         }
     
 

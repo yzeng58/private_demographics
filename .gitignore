@@ -5,6 +5,8 @@ __pycache__
 .DS_Store
 **/.DS_Store
 
+figures/
+
 **/*.out
 **/*.err
 **/*.log

@@ -108,7 +108,7 @@ def exp_init(
         seed = seed,
     )
 
-    if start_model_path and method in ['grass', 'eiil']:
+    if start_model_path and method in ['grass', 'eiil', 'cvar_doro']:
         try: 
             m.load_state_dict(torch.load(start_model_path))
         except RuntimeError: 
@@ -584,11 +584,11 @@ def get_domain_eiil(
     else:
         pred_domain, true_domain, idx_mode, idx_class = [], [], [], []
         for mode in ['train', 'val']:
-            for batch_idx, features, labels, domains in loader[mode]:
+            for batch_idx, features, labels, domains in tqdm(loader[mode], total = len(loader[mode]), desc='Train Set Domain Predicting'):
                 true_domain.append(domains.numpy())
                 idx_mode.extend([mode] * len(batch_idx))
                 idx_class.append(labels.numpy())
-                pred_domain_ = torch.randn(len(features)).requires_grad_()
+                pred_domain_ = torch.randn(len(features), device = device).requires_grad_()
                 optim_group = torch.optim.Adam([pred_domain_], lr=lr_ei)
 
                 features, labels = features.to(device), labels.to(device)

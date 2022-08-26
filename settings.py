@@ -5,6 +5,7 @@ algs = [
     'grass',
     'robust_dro',
     'cvar_doro',
+    'eiil',
 ]
 
 tasks = [

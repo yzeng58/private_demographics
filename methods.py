@@ -1,3 +1,4 @@
+from genericpath import isfile
 from tqdm import tqdm
 import torch, os, random, argparse, wandb, time, sys
 from utils import *
@@ -17,6 +18,7 @@ from sklearn.metrics import davies_bouldin_score, calinski_harabasz_score, silho
 from sklearn.metrics import normalized_mutual_info_score as NMI
 from sklearn.metrics.cluster import adjusted_rand_score as ARS
 from sklearn.metrics.pairwise import cosine_distances
+from torch.autograd import grad
 
 ################## MODEL SETTING ########################
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -116,8 +118,6 @@ def exp_init(
 
     if model == 'bert': 
         optim = get_bert_optim(m, 1e-3, 1e-5)
-    elif model == 'resnet50':
-        optim = torch.optim.Adam(get_parameters(m, model), lr=1e-3, weight_decay=1e-5)
     else:
         optim = torch.optim.Adam(get_parameters(m, model), lr=1e-3, weight_decay=1e-5)
     optim.zero_grad()
@@ -178,7 +178,7 @@ def collect_gradient(
     lr_q,
     lr_scheduler,
     dataset_name,
-    n,
+    num_class,
 ):
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     try:
@@ -204,6 +204,7 @@ def collect_gradient(
             optim,
             num_domain,
             num_group,
+            num_class,
             task,
             lr_q,
             None,
@@ -274,7 +275,7 @@ def grad_clustering_parallel(
     log_wandb,
     outlier,
     process_grad,
-    n,
+    num_class,
 ):      
     grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
         model,
@@ -288,7 +289,7 @@ def grad_clustering_parallel(
         1e-3,
         lr_scheduler,
         dataset_name,
-        n,
+        num_class,
     )
 
     num_group = 0
@@ -357,7 +358,7 @@ def grad_clustering_parallel(
         wandb.log(wandb_log_dict)
         wandb.finish()
 
-def get_domain(
+def get_domain_grass(
     m,
     loader, 
     device,
@@ -399,7 +400,7 @@ def get_domain(
             lr_q,
             lr_scheduler,
             dataset_name,
-            n,
+            num_class,
         )
 
         pred_domain = np.zeros(true_domain.shape)
@@ -558,7 +559,107 @@ def get_domain(
             'val': torch.tensor(pred_dict['n_val'], device = device),
         },
     }
-        
+
+def get_domain_eiil(
+    loader,
+    device,
+    m,
+    lr_ei,
+    epoch_ei,
+    model,
+    num_domain,
+    dataset_name,
+    outlier,
+    batch_size,
+    num_class,
+    load_pred_dict,
+):
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d.json' % (outlier, lr_ei, epoch_ei))
+
+    if os.path.isfile(file_name) and load_pred_dict:
+        print('Loading estimated domains from %s' % file_name)
+        with open(file_name, 'r') as f:
+            pred_dict = json.load(f)
+    else:
+        pred_domain, true_domain, idx_mode, idx_class = [], [], [], []
+        for mode in ['train', 'val']:
+            for batch_idx, features, labels, domains in loader[mode]:
+                true_domain.append(domains.numpy())
+                idx_mode.extend([mode] * len(batch_idx))
+                idx_class.append(labels.numpy())
+                pred_domain_ = torch.randn(len(features)).requires_grad_()
+                optim_group = torch.optim.Adam([pred_domain_], lr=lr_ei)
+
+                features, labels = features.to(device), labels.to(device)
+                output = m(features)
+                if len(output) == 2: _, output = output
+                loss = F.cross_entropy(output, labels, reduction = 'none')
+
+                for _ in range(epoch_ei):
+                    error_a = (loss * pred_domain_.sigmoid()).mean()
+                    error_b = (loss * (1-pred_domain_.sigmoid())).mean()
+
+                    penalty_a = grad(error_a, get_parameters(m, model), create_graph=True)[0].pow(2).mean()
+                    penalty_b = grad(error_b, get_parameters(m, model), create_graph=True)[0].pow(2).mean()
+                    
+                    npenalty = - torch.stack([penalty_a, penalty_b]).mean()
+
+                    optim_group.zero_grad()
+                    npenalty.backward(retain_graph=True)
+                    optim_group.step()
+                
+                pred_domain_ = pred_domain_.detach()
+                pred_domain_[pred_domain_ > 0.5] = 1
+                pred_domain_[pred_domain_ <= 0.5] = 0
+                pred_domain.append(pred_domain_.cpu().detach().numpy())
+
+        true_domain = np.concatenate(true_domain)
+        idx_class = np.concatenate(idx_class)
+        true_group = group_idx(true_domain, idx_class, num_domain)
+        idx_mode = np.array(idx_mode)
+        pred_domain =  np.concatenate(pred_domain)
+
+        ars_score = ARS(true_group, pred_domain)
+        pred_dict = {}
+        pred_dict['num_domain'] = 2
+        pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
+        pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
+        pred_dict['ars']   = ars_score
+
+        for mode in ['train', 'val']:
+            pred_dict['n_%s' % mode] = np.zeros(pred_dict['num_domain'] * num_class)
+            for a in range(pred_dict['num_domain']):
+                for y in range(num_class):
+                    g = group_idx(a, y, pred_dict['num_domain'])
+                    group = (np.array(pred_dict[mode]) == a) & (idx_class[idx_mode == mode] == y)
+                    pred_dict['n_%s' % mode][g] = group.sum().item()
+            pred_dict['n_%s' % mode] = pred_dict['n_%s' % mode].tolist()
+
+        with open(file_name, 'w') as f:
+            json.dump(pred_dict, f)          
+        print('Estimated domains are saved in %s' % file_name)
+    print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
+
+    return {
+        'train': DataLoader(
+            DomainLoader(pred_dict['train']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'val': DataLoader(
+            DomainLoader(pred_dict['val']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'num_domain': pred_dict['num_domain'],
+        'n': {
+            'train': torch.tensor(pred_dict['n_train'], device = device),
+            'val': torch.tensor(pred_dict['n_val'], device = device),
+        },
+    }
+    
+
 def compute_ay(group_idx, num_domain):
     a = group_idx % num_domain
     y = group_idx // num_domain
@@ -770,6 +871,7 @@ def run_epoch(
     optim,
     num_domain,
     num_group,
+    num_class,
     task,
     lr_q,
     q,
@@ -837,7 +939,34 @@ def run_epoch(
                 lr_scheduler,
                 None,
             )
-    
+
+    elif method == 'eiil':
+        results = {'q': q}
+        for _, features, labels, domains in tqdm_object:
+            pred_domain = get_pred_domain(domain_loader, 'train')
+
+            results = gradient_descent(
+                model,
+                features,
+                labels,
+                pred_domain,
+                m,
+                optim,
+                device,
+                num_domain,
+                domain_loader['num_domain'] * num_class,
+                task,
+                lr_q,
+                None,
+                False,
+                None,
+                'robust_dro',
+                results['q'], 
+                lr_scheduler,
+                None,
+            )
+
+
     elif method == 'robust_dro':
         results = {'q': q}
         for _, features, labels, domains in tqdm_object:
@@ -885,7 +1014,7 @@ def run_epoch(
                 outlier_frac,
             )
 
-def pred_groups(
+def pred_groups_grass(
     dataset_name,
     batch_size,
     seed,
@@ -949,7 +1078,7 @@ def pred_groups(
         log_wandb,
         outlier,
         process_grad,
-        n,
+        num_class,
     )
 
 def run_exp(
@@ -981,6 +1110,8 @@ def run_exp(
     eps = None,
     outlier_frac = 0.2,
     minimal_group_frac = 0.5,
+    lr_ei = 1e-3,
+    epoch_ei = 20,
 ):
 
     [   
@@ -1039,6 +1170,11 @@ def run_exp(
             'num_epoch': num_epoch,
             'batch_size': batch_size,
             'outlier_frac': outlier_frac,
+            'lr': lr,
+        },
+        'eiil': {
+            'num_epoch': num_epoch,
+            'batch_size': batch_size,
             'lr': lr,
         }
     }
@@ -1109,7 +1245,7 @@ def run_exp(
                         'min_samples': min_samples,
                     })
 
-        domain_loader = get_domain(
+        domain_loader = get_domain_grass(
             m, 
             loader,
             device, 
@@ -1133,6 +1269,24 @@ def run_exp(
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
         q = torch.ones(domain_loader['num_group'], device = device)
+    elif method == 'eiil':
+        domain_loader = get_domain_eiil(
+            loader,
+            device,
+            m,
+            lr_ei,
+            epoch_ei,
+            model,
+            num_domain,
+            dataset_name,
+            outlier,
+            batch_size,
+            num_class,
+            load_pred_dict,
+        )
+        domain_loader['train_iter'] = iter(domain_loader['train'])
+        domain_loader['val_iter'] = iter(domain_loader['val'])
+        q = torch.ones(domain_loader['num_domain'] * num_class, device = device)
     else:
         q = torch.ones(num_group, device = device)
 
@@ -1149,6 +1303,7 @@ def run_exp(
             optim,
             num_domain,
             num_group,
+            num_class,
             task,
             lr_q,
             q,
@@ -1168,6 +1323,7 @@ def run_exp(
                 m, 
                 num_domain, 
                 num_group,
+                num_class,
                 task,
                 n, 
                 device = device, 
@@ -1183,6 +1339,7 @@ def run_exp(
                 m,
                 num_domain, 
                 num_group,
+                num_class,
                 task,
                 n, 
                 device = device, 
@@ -1209,6 +1366,7 @@ def run_exp(
             m, 
             num_domain, 
             num_group,
+            num_class,
             task,
             n, 
             device = device, 
@@ -1224,6 +1382,7 @@ def run_exp(
             m, 
             num_domain, 
             num_group,
+            num_class,
             task,
             n, 
             device = device, 
@@ -1246,6 +1405,7 @@ def run_exp(
         best_m, 
         num_domain, 
         num_group,
+        num_class,
         task,
         n, 
         device = device, 
@@ -1265,6 +1425,7 @@ def run_exp(
         m, 
         num_domain, 
         num_group,
+        num_class,
         task,
         n, 
         device = device, 
@@ -1294,6 +1455,7 @@ def inference(
     m, 
     num_domain, 
     num_group,
+    num_class,
     task,
     n, 
     device = 'cpu',
@@ -1313,8 +1475,12 @@ def inference(
     domain_loss = torch.zeros(num_group, device = device)
 
     if mode in ['train', 'val'] and domain_loader:
-        pred_domain_acc = torch.zeros(domain_loader['num_group'], device = device)
-        pred_domain_loss = torch.zeros(domain_loader['num_group'], device = device)
+        if method == 'grass':
+            pred_num_group = domain_loader['num_group'] 
+        elif method == 'eiil':
+            pred_num_group = domain_loader['num_domain'] * num_class
+        pred_domain_acc = torch.zeros(pred_num_group, device = device)
+        pred_domain_loss = torch.zeros(pred_num_group, device = device)
 
     for _, features, labels, domains in loader[mode]:
         features, labels, domains = features.to(device), labels.to(device), domains.to(device)
@@ -1340,12 +1506,21 @@ def inference(
         avg_acc += torch.sum(bool_correct).item()
 
         if mode in ['train', 'val'] and domain_loader:
-            for g in range(domain_loader['num_group']):
-                group = pred_domains == g
+            if method == 'grass':
+                for g in range(pred_num_group):
+                    group = pred_domains == g
 
-                if group.sum() > 0:
-                    pred_domain_acc[g] += torch.sum(bool_correct[group]).item()
-                    pred_domain_loss[g] += F.cross_entropy(output[group], labels[group], reduction = 'sum').item()
+                    if group.sum() > 0:
+                        pred_domain_acc[g] += torch.sum(bool_correct[group]).item()
+                        pred_domain_loss[g] += F.cross_entropy(output[group], labels[group], reduction = 'sum').item()
+            elif method == 'eiil':
+                for g in range(pred_num_group):
+                    a, y = domain_class_idx(g, domain_loader['num_domain'])
+                    group = (pred_domains == a) & (labels == y)
+
+                    if group.sum() > 0:
+                        pred_domain_acc[g] += torch.sum(bool_correct[group]).item()
+                        pred_domain_loss[g] += F.cross_entropy(output[group], labels[group], reduction = 'sum').item()
 
         for g in range(num_group):
             if task == 'fairness':
@@ -1424,19 +1599,19 @@ def inference(
         print('##############################')
         print('# Predicted Group Statistics #')
         print('##############################')
-        print('------------------' + '---------' * (domain_loader['num_group']))
+        print('------------------' + '---------' * (pred_num_group))
         print_header    = '|      metric    |'
         print_acc       = '|    accuracy    |'
         print_loss      = '|      loss      |'
 
-        for g in range(domain_loader['num_group']):
+        for g in range(pred_num_group):
             print_header += ' group %d|' % g
             print_acc    += '%s%.2f%% |' % (' '*(3-len(str(round(pred_domain_acc[g].item()*100)))), pred_domain_acc[g] * 100)
             print_loss   += ' %s%.2f |' % (' '*(3-len(str(round(pred_domain_loss[g].item())))), pred_domain_loss[g])
         print(print_header)
         print(print_acc)
         print(print_loss)
-        print('------------------' + '---------' * (domain_loader['num_group']))
+        print('------------------' + '---------' * (pred_num_group))
 
         print('| Predicted Worst-case Accuracy: %.2f%%' % (pred_worst_acc*100))
 
@@ -1488,6 +1663,8 @@ def parse_args():
     parser.add_argument('--best_clustering_parameter', default = 1, type = int, choices = [0,1])
     parser.add_argument('--outlier_frac', default = 0.2, type = float)
     parser.add_argument('--minimal_group_frac', default = 0.5, type = float)
+    parser.add_argument('--lr_ei', default = 1e-3, type = float)
+    parser.add_argument('--epoch_ei', default = 20, type = int)
 
     args = parser.parse_args()
 
@@ -1526,9 +1703,11 @@ def main():
     best_clustering_parameter = args.best_clustering_parameter
     outlier_frac = args.outlier_frac
     minimal_group_frac = args.minimal_group_frac
+    lr_ei = args.lr_ei
+    epoch_ei = args.epoch_ei
 
     if pred_groups_only:
-        pred_groups(
+        pred_groups_grass(
             dataset_name,
             batch_size,
             seed,
@@ -1577,6 +1756,8 @@ def main():
             eps,
             outlier_frac,
             minimal_group_frac,
+            lr_ei,
+            epoch_ei,
         )
 
 if __name__ == '__main__':

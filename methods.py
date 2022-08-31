@@ -1,6 +1,5 @@
-from genericpath import isfile
 from tqdm import tqdm
-import torch, os, random, argparse, wandb, time, sys
+import torch, os, random, argparse, wandb, time, sys, umap
 from utils import *
 import numpy as np
 from sklearn.decomposition import PCA
@@ -659,6 +658,34 @@ def get_domain_eiil(
         },
     }
     
+def get_domain_george(
+    loader,
+    num_domain,
+    num_class,
+    seed,
+):
+    inputs, true_domain, idx_mode, idx_class = [], [], [], []
+    for mode in ['train', 'val']:
+        for batch_idx, features, labels, domains in loader[mode]:
+            inputs.append(features.numpy())
+            true_domain.append(domains.numpy())
+            idx_class.append(labels.numpy())
+            idx_mode.extend([mode] * len(batch_idx))
+
+    inputs = np.concatenate(inputs)
+    true_domain = np.concatenate(true_domain)
+    idx_class = np.concatenate(idx_class)
+    true_group = group_idx(true_domain, idx_class, num_domain)
+    idx_mode = np.array(idx_mode)
+
+    return (inputs, true_domain, idx_class, true_group, idx_mode, seed, num_class)
+    print('umap')
+    for y in range(num_class):
+        y_idx = idx_class == y
+        reducer = umap.UMAP(random_state = seed, n_components = 2, n_neighbors = 10, min_dist = 0)
+        umap_labels = reducer.fit_transform(inputs[y_idx])
+        print(np.unique(umap_labels))
+
 
 def compute_ay(group_idx, num_domain):
     a = group_idx % num_domain

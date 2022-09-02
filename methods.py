@@ -689,9 +689,6 @@ def get_domain_george(
 
     cluster_model = OverClusterModel()
     
-    
-
-
 def compute_ay(group_idx, num_domain):
     a = group_idx % num_domain
     y = group_idx // num_domain
@@ -812,7 +809,6 @@ def robust_reweight_groups(
     for g in range(num_group):
         q[g] = torch.tensor([q[g] * torch.exp(lr_q * fair_loss_m[g].data), 1e10]).min()
     q[:] = q / q.sum() * 3
-
 
 def gradient_descent(
     model,

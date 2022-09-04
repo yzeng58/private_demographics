@@ -662,32 +662,58 @@ def get_domain_george(
     loader,
     num_domain,
     num_class,
+    max_k,
+    device,
     seed,
+    overcluster_factor = 5,
+    search_k = True, # [True, False]
     n_components = 2,
     n_neighbors = 10,
     min_dist = 0,
+    cluster_method = 'gmm', # ['gmm', 'kmeans'] -- gmm: gaussian mixture model, kmeans
+    metric_types = 'mean_loss', # ['mean_loss', 'composition']
 ):
     inputs, true_domain, idx_mode, idx_class = [], [], [], []
     for mode in ['train', 'val']:
         for batch_idx, features, labels, domains in loader[mode]:
-            inputs.append(features.numpy())
-            true_domain.append(domains.numpy())
-            idx_class.append(labels.numpy())
+            features, labels, domains = features.to(device), labels.to(device), domains.to(device)
+            inputs.append(features)
+            true_domain.append(domains)
+            idx_class.append(labels)
             idx_mode.extend([mode] * len(batch_idx))
 
-    inputs = np.concatenate(inputs)
-    true_domain = np.concatenate(true_domain)
-    idx_class = np.concatenate(idx_class)
+    inputs = torch.cat(inputs).to(device)
+    true_domain = torch.cat(true_domain).to(device)
+    idx_class = torch.cat(idx_class).to(device)
     true_group = group_idx(true_domain, idx_class, num_domain)
     idx_mode = np.array(idx_mode)
-    inputs_trans = np.zeros((inputs.shape[0], n_components))
+    inputs_trans = torch.zeros((inputs.shape[0], n_components), device = device)
 
     for y in range(num_class):
         y_idx = idx_class == y
         reducer = umap.UMAP(random_state = seed, n_components = n_components, n_neighbors = n_neighbors, min_dist = min_dist)
-        inputs_trans[y_idx] = reducer.fit_transform(inputs[y_idx])
+        inputs_trans[y_idx] = torch.tensor(reducer.fit_transform(inputs[y_idx]), device = device)
 
-    cluster_model = OverClusterModel()
+    cluster_model = OverclusterModel(
+        cluster_method = cluster_method, 
+        max_k = max_k, 
+        seed = seed, 
+        sil_cuda = ('cuda' in device.type),
+        search = search_k,
+        oc_fac = overcluster_factor,
+    )
+
+    c_trainer = GEORGECluster(metric_types, superclasses_to_ignore = None)
+    group_to_models = c_trainer.train(
+        cluster_model, 
+        {
+            'train': inputs_trans[idx_mode == 'train'],
+            'val': inputs_trans[idx_mode == 'val'],
+        },
+    )
+    return group_to_models
+    
+
     
 def compute_ay(group_idx, num_domain):
     a = group_idx % num_domain

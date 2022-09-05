@@ -984,7 +984,7 @@ class GEORGECluster:
             metrics[metric_type] = metric
         return metrics
 
-    def train(self, cluster_model, inputs):
+    def train(self, cluster_model, inputs, idx_mode, idx_class, num_class, losses):
         """Fits cluster models to the data of each superclass.
         Args:
             cluster_model(Any): The model used to produce cluster assignments. Must
@@ -1017,11 +1017,16 @@ class GEORGECluster:
         orig_cluster_model = cluster_model
         extra_info = hasattr(cluster_model, 'requires_extra_info')
 
-        inputs_tr = inputs['train']
-        inputs_val = inputs['val']
+        inputs_tr = inputs[idx_mode == 'train']
+        inputs_val = inputs[idx_mode == 'val']
+
+        idx_class_tr = idx_class[idx_mode == 'train']
+        idx_class_val = idx_class[idx_mode == 'val']
 
         group_to_models = []
-        for group, group_data in inputs_tr[0].items():
+        for y in range(num_class):
+            group, group_data = y, inputs_tr[idx_class_tr == y]
+        # for group, group_data in inputs_tr[0].items():
             if group in self.superclasses_to_ignore:
                 # Keep this superclass in a single "cluster"
                 print(f'Not clustering superclass {group}...')
@@ -1029,13 +1034,16 @@ class GEORGECluster:
                 continue
 
             cluster_model = deepcopy(orig_cluster_model)
-            activations = group_data['activations']
+            # activations = group_data['activations']
+            activations = group_data
 
             if extra_info:
-                val_group_data = inputs_val[0][group]
-                losses = group_data['losses']
-                val_activations = val_group_data['activations']
-                kwargs = {'val_activ': val_activations, 'losses': losses}
+                val_group_data = inputs_val[idx_class_val == y]
+                # val_group_data = inputs_val[0][group]
+                # losses = group_data['losses']
+                # val_activations = val_group_data['activations']
+                val_activations = val_group_data
+                kwargs = {'val_activ': val_activations, 'losses': losses[(idx_mode == 'train') & np.array(idx_class == y)]}
             else:
                 kwargs = {}
 
@@ -1046,7 +1054,7 @@ class GEORGECluster:
 
         return group_to_models
 
-    def evaluate(self, group_to_models, split_inputs):
+    def evaluate(self, group_to_models, inputs_trans, idx_class, num_class):
         """Returns cluster assignments for each of the inputs.
         
         Args:
@@ -1062,50 +1070,26 @@ class GEORGECluster:
                 the outputs consists of both the reduced activations and the cluster
                 assignments (`activations` and `assignments` keys, respectively).
         """
-        group_to_data, group_assignments = split_inputs
-        group_to_metrics = {}
-        group_to_outputs = {}
+        # group_to_data, group_assignments = split_inputs
+
+        # group_to_metrics = {}
+        # group_to_outputs = {}
         cluster_floor = 0
-        for group, group_data in group_to_data.items():
+        pred_domain = np.zeros(inputs_trans.shape[0])
+        for y in range(num_class):
+            group, group_data = y, inputs_trans[idx_class == y]
+        # for group, group_data in group_to_data.items():
             print(f'Evaluating group {group}...')
 
-            group_outputs = group_data.copy()
+            # group_outputs = np.array(deepcopy(group_data))
             cluster_model = group_to_models[group]
-            assignments = np.array(cluster_model.predict(group_data['activations']))
-            group_outputs['assignments'] = cluster_floor + assignments
+            assignments = np.array(cluster_model.predict(group_data))
+            pred_domain[idx_class == y] = cluster_floor + assignments
 
-            group_to_outputs[group] = group_outputs
-            group_to_metrics[group] = self.compute_metrics(group_data, assignments)
+            # group_to_outputs[group] = group_outputs
+            # group_to_metrics[group] = self.compute_metrics(group_data, assignments)
 
             # update cluster_floor to ensure disjoint assignments
             k = get_k_from_model(cluster_model)  # accounts for degenerate cases
             cluster_floor = cluster_floor + k
-
-        outputs = self._ungroup(group_to_outputs, group_assignments)
-        return group_to_metrics, outputs
-
-    def _ungroup(self, group_to_data, group_assignments):
-        """Ungroups data that is partitioned by group.
-        Args:
-            group_to_data(Dict[int, Dict[str, Sequence]]) a partitioned
-                group of data, i.e. the object returned by GEORGEReduce._group
-            group_assignments(Sequence[int]): A list of assignments of data,
-                where `group_assignments[idx]` is the group of data[idx].
-        Returns:
-            data(Dict[str, Sequence]): A dictionary of sequences with the same
-                length of `group_assignments`.
-        """
-        # keep track of where we are in each group of group_to_data
-        group_to_ptr = {group: 0 for group in group_to_data.keys()}
-        data = defaultdict(list)
-        for group in group_assignments:
-            group_data = group_to_data[group]
-            for k, v in group_data.items():
-                data[k].append(v[group_to_ptr[group]])
-            group_to_ptr[group] += 1
-
-        # format
-        for k, v in data.items():
-            data[k] = np.array(v)
-
-        return data
+        return pred_domain

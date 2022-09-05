@@ -134,7 +134,7 @@ def exp_init(
     else:
         lr_scheduler = None
 
-    return [
+    return (
         m,
         loader,
         optim,
@@ -146,7 +146,7 @@ def exp_init(
         n,
         num_feature,
         num_class,
-    ]
+    )
 
 def remove_outliers(features, labels, domains, pred_domain):
     clean_idx = pred_domain >= 0
@@ -378,8 +378,9 @@ def get_domain_grass(
     n,
 ):
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    file_name = os.path.join(folder_name, 'pred_dict_outlier_%s.json' % outlier)
+
     if load_pred_dict: 
-        file_name = os.path.join(folder_name, 'pred_dict_outlier_%s.json' % outlier)
         with open(file_name, 'r') as f:
             pred_dict = json.load(f)
 
@@ -533,9 +534,6 @@ def get_domain_grass(
                 group = np.array(pred_dict[mode]) == g
                 pred_dict['n_%s' % mode].append(int(group.sum()))
 
-        folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-        file_name = os.path.join(folder_name, 'pred_dict_outlier_%s.json' % outlier)
-
         with open(file_name, 'w') as f:
             json.dump(pred_dict, f)          
         print('Estimated domains are saved in %s' % file_name)
@@ -659,12 +657,16 @@ def get_domain_eiil(
     }
     
 def get_domain_george(
+    m,
     loader,
     num_domain,
     num_class,
     max_k,
     device,
     seed,
+    dataset_name,
+    outlier,
+    batch_size,
     overcluster_factor = 5,
     search_k = True, # [True, False]
     n_components = 2,
@@ -672,48 +674,101 @@ def get_domain_george(
     min_dist = 0,
     cluster_method = 'gmm', # ['gmm', 'kmeans'] -- gmm: gaussian mixture model, kmeans
     metric_types = 'mean_loss', # ['mean_loss', 'composition']
+    load_pred_dict = True
 ):
-    inputs, true_domain, idx_mode, idx_class = [], [], [], []
-    for mode in ['train', 'val']:
-        for batch_idx, features, labels, domains in loader[mode]:
-            features, labels, domains = features.to(device), labels.to(device), domains.to(device)
-            inputs.append(features)
-            true_domain.append(domains)
-            idx_class.append(labels)
-            idx_mode.extend([mode] * len(batch_idx))
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s.json' % (outlier, overcluster_factor))
 
-    inputs = torch.cat(inputs).to(device)
-    true_domain = torch.cat(true_domain).to(device)
-    idx_class = torch.cat(idx_class).to(device)
-    true_group = group_idx(true_domain, idx_class, num_domain)
-    idx_mode = np.array(idx_mode)
-    inputs_trans = torch.zeros((inputs.shape[0], n_components), device = device)
+    if os.path.isfile(file_name) and load_pred_dict:
+        print('Loading estimated domains from %s' % file_name)
+        with open(file_name, 'r') as f:
+            pred_dict = json.load(f)
+    else:
+        inputs, true_domain, idx_mode, idx_class, losses = [], [], [], [], []
+        for mode in ['train', 'val']:
+            for batch_idx, features, labels, domains in tqdm(loader[mode], total = len(loader[mode]), desc = 'Loading Representation for %s set' % mode):
+                features, labels, domains = features.to(device), labels.to(device), domains.to(device)
+                outputs = m(features)
+                if len(outputs) == 2: _, outputs = outputs
+                loss = F.cross_entropy(outputs, labels, reduction = 'none')
+                losses.extend(list(map(lambda x: x.item(), loss)))
+                inputs.append(features)
+                true_domain.append(domains)
+                idx_class.append(labels)
+                idx_mode.extend([mode] * len(batch_idx))
 
-    for y in range(num_class):
-        y_idx = idx_class == y
-        reducer = umap.UMAP(random_state = seed, n_components = n_components, n_neighbors = n_neighbors, min_dist = min_dist)
-        inputs_trans[y_idx] = torch.tensor(reducer.fit_transform(inputs[y_idx]), device = device)
+        inputs = torch.cat(inputs).to(device)
+        true_domain = torch.cat(true_domain).to(device)
+        idx_class = torch.cat(idx_class).to(device)
+        true_group = group_idx(true_domain, idx_class, num_domain)
+        idx_mode = np.array(idx_mode)
+        inputs_trans = torch.zeros((inputs.shape[0], n_components), device = device)
+        losses = np.array(losses)
 
-    cluster_model = OverclusterModel(
-        cluster_method = cluster_method, 
-        max_k = max_k, 
-        seed = seed, 
-        sil_cuda = ('cuda' in device.type),
-        search = search_k,
-        oc_fac = overcluster_factor,
-    )
+        print('UMAP dimension reduction...')
+        for y in range(num_class):
+            y_idx = idx_class == y
+            reducer = umap.UMAP(random_state = seed, n_components = n_components, n_neighbors = n_neighbors, min_dist = min_dist)
+            inputs_trans[y_idx] = torch.tensor(reducer.fit_transform(inputs[y_idx]), device = device)
 
-    c_trainer = GEORGECluster(metric_types, superclasses_to_ignore = None)
-    group_to_models = c_trainer.train(
-        cluster_model, 
-        {
-            'train': inputs_trans[idx_mode == 'train'],
-            'val': inputs_trans[idx_mode == 'val'],
+        cluster_model = OverclusterModel(
+            cluster_method = cluster_method, 
+            max_k = max_k, 
+            seed = seed, 
+            sil_cuda = ('cuda' in device.type),
+            search = search_k,
+            oc_fac = overcluster_factor,
+        )
+
+        c_trainer = GEORGECluster(metric_types, superclasses_to_ignore = [])
+        group_to_models = c_trainer.train(
+            cluster_model, 
+            inputs_trans,
+            idx_mode,
+            idx_class,
+            num_class,
+            losses,
+        )
+
+        pred_domain = c_trainer.evaluate(
+            group_to_models, 
+            inputs_trans,
+            idx_class,
+            num_class,
+        )
+
+        ars_score = ARS(true_group, pred_domain)
+        pred_dict = {}
+        pred_dict['ars'] = ars_score
+        pred_dict['num_group'] = len(np.unique(num_domain))
+        for mode in ['train', 'val']:
+            pred_dict['n_%s' % mode] = []
+            for g in range(pred_dict['num_group']):
+                group = np.array(pred_dict[mode]) == g
+                pred_dict['n_%s' % mode].append(int(group.sum()))
+
+        with open(file_name, 'w') as f:
+            json.dump(pred_dict, f)          
+        print('Estimated domains are saved in %s' % file_name)
+                
+    print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
+    return {
+        'train': DataLoader(
+            DomainLoader(pred_dict['train']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'val': DataLoader(
+            DomainLoader(pred_dict['val']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'num_group': pred_dict['num_group'],
+        'n': {
+            'train': torch.tensor(pred_dict['n_train'], device = device),
+            'val': torch.tensor(pred_dict['n_val'], device = device),
         },
-    )
-    return group_to_models
-    
-
+    }
     
 def compute_ay(group_idx, num_domain):
     a = group_idx % num_domain
@@ -1168,7 +1223,7 @@ def run_exp(
     epoch_ei = 20,
 ):
 
-    [   
+    (   
         m,
         loader,
         optim,
@@ -1180,7 +1235,7 @@ def run_exp(
         n,
         num_feature,
         num_class,
-     ] = exp_init(
+     ) = exp_init(
         dataset_name,
         batch_size,
         target_var,
@@ -1343,6 +1398,8 @@ def run_exp(
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
         q = torch.ones(domain_loader['num_domain'] * num_class, device = device)
+    elif method == 'george':
+        pass
     else:
         q = torch.ones(num_group, device = device)
 

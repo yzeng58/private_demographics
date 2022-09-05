@@ -6,7 +6,7 @@ algs = [
     'robust_dro',
     'cvar_doro',
     'eiil',
-    'george'
+    'george',
 ]
 
 tasks = [

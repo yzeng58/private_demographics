@@ -1043,7 +1043,7 @@ class GEORGECluster:
                 # losses = group_data['losses']
                 # val_activations = val_group_data['activations']
                 val_activations = val_group_data
-                kwargs = {'val_activ': val_activations, 'losses': losses[(idx_mode == 'train') & np.array(idx_class == y)]}
+                kwargs = {'val_activ': val_activations, 'losses': losses[(idx_mode == 'train') & np.array((idx_class == y).cpu())]}
             else:
                 kwargs = {}
 

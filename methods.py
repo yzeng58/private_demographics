@@ -697,25 +697,25 @@ def get_domain_george(
                 idx_class.append(labels)
                 idx_mode.extend([mode] * len(batch_idx))
 
-        inputs = torch.cat(inputs).to(device)
-        true_domain = torch.cat(true_domain).to(device)
-        idx_class = torch.cat(idx_class).to(device)
+        inputs = torch.cat(inputs).cpu()
+        true_domain = torch.cat(true_domain).cpu()
+        idx_class = torch.cat(idx_class).cpu()
         true_group = group_idx(true_domain, idx_class, num_domain)
         idx_mode = np.array(idx_mode)
-        inputs_trans = torch.zeros((inputs.shape[0], n_components), device = device)
+        inputs_trans = torch.zeros((inputs.shape[0], n_components))
         losses = np.array(losses)
 
         print('UMAP dimension reduction...')
         for y in range(num_class):
             y_idx = idx_class == y
             reducer = umap.UMAP(random_state = seed, n_components = n_components, n_neighbors = n_neighbors, min_dist = min_dist)
-            inputs_trans[y_idx] = torch.tensor(reducer.fit_transform(inputs[y_idx]), device = device)
+            inputs_trans[y_idx] = torch.tensor(reducer.fit_transform(inputs[y_idx]))
 
         cluster_model = OverclusterModel(
             cluster_method = cluster_method, 
             max_k = max_k, 
             seed = seed, 
-            sil_cuda = ('cuda' in device.type),
+            sil_cuda = False,
             search = search_k,
             oc_fac = overcluster_factor,
         )
@@ -742,10 +742,12 @@ def get_domain_george(
         pred_dict['ars'] = ars_score
         pred_dict['num_group'] = len(np.unique(num_domain))
         for mode in ['train', 'val']:
+            pred_dict[mode] = pred_domain[idx_mode == mode]
             pred_dict['n_%s' % mode] = []
             for g in range(pred_dict['num_group']):
-                group = np.array(pred_dict[mode]) == g
+                group = pred_dict[mode] == g
                 pred_dict['n_%s' % mode].append(int(group.sum()))
+            pred_dict[mode] = pred_dict[mode].tolist()
 
         with open(file_name, 'w') as f:
             json.dump(pred_dict, f)          
@@ -917,10 +919,10 @@ def gradient_descent(
 
     if mode in ['standard']:
         loss = F.cross_entropy(output, labels, reduction = 'sum')
-    elif mode in ['grass', 'robust_dro']:
+    elif mode in ['grass', 'robust_dro', 'george']:
         loss_g = torch.zeros(num_group, device = device)
         for g in range(num_group):
-            if task == 'irm' or mode == 'grass':
+            if task == 'irm' or mode in ['grass', 'george']:
                 group = domains == g
             elif task == 'fairness':
                 a, y = domain_class_idx(g, num_domain)
@@ -1017,7 +1019,7 @@ def run_epoch(
             )
             
 
-    elif method == 'grass':
+    elif method in ['grass', 'george']:
         results = {'q': q}
         for _, features, labels, domains in tqdm_object:
             pred_domain = get_pred_domain(domain_loader, 'train')
@@ -1043,7 +1045,7 @@ def run_epoch(
                 None,
                 False,
                 None,
-                'grass',
+                method,
                 results['q'], 
                 lr_scheduler,
                 None,
@@ -1221,6 +1223,14 @@ def run_exp(
     minimal_group_frac = 0.5,
     lr_ei = 1e-3,
     epoch_ei = 20,
+    max_k = 4,
+    overcluster_factor = 5,
+    search_k = True,
+    n_components = 2,
+    n_neighbors = 10,
+    min_dist = 0,
+    george_cluster_method = 'gmm',
+    metric_types = 'mean_loss',
 ):
 
     (   
@@ -1287,6 +1297,16 @@ def run_exp(
             'lr': lr,
             'lr_ei': lr_ei,
             'epoch_ei': epoch_ei,
+        },
+        'george': {
+            'num_epoch': num_epoch,
+            'batch_size': batch_size,
+            'lr_q': lr_q,
+            'lr': lr,
+            'outlier': outlier,
+            'max_k': max_k,
+            'overcluster_factor': overcluster_factor,
+            'george_cluster_method': george_cluster_method,
         }
     }
 
@@ -1399,7 +1419,29 @@ def run_exp(
         domain_loader['val_iter'] = iter(domain_loader['val'])
         q = torch.ones(domain_loader['num_domain'] * num_class, device = device)
     elif method == 'george':
-        pass
+        domain_loader = get_domain_george(
+                m,
+                loader,
+                num_domain,
+                num_class,
+                max_k,
+                device,
+                seed,
+                dataset_name,
+                outlier,
+                batch_size,
+                overcluster_factor,
+                search_k, # [True, False]
+                n_components,
+                n_neighbors,
+                min_dist,
+                george_cluster_method, # ['gmm', 'kmeans'] -- gmm: gaussian mixture model, kmeans
+                metric_types, # ['mean_loss', 'composition']
+                load_pred_dict,
+        )
+        domain_loader['train_iter'] = iter(domain_loader['train'])
+        domain_loader['val_iter'] = iter(domain_loader['val'])
+        q = torch.ones(domain_loader['num_group'], device = device)
     else:
         q = torch.ones(num_group, device = device)
 
@@ -1588,7 +1630,7 @@ def inference(
     domain_loss = torch.zeros(num_group, device = device)
 
     if mode in ['train', 'val'] and domain_loader:
-        if method == 'grass':
+        if method in ['grass', 'george']:
             pred_num_group = domain_loader['num_group'] 
         elif method == 'eiil':
             pred_num_group = domain_loader['num_domain'] * num_class
@@ -1619,7 +1661,7 @@ def inference(
         avg_acc += torch.sum(bool_correct).item()
 
         if mode in ['train', 'val'] and domain_loader:
-            if method == 'grass':
+            if method in ['grass', 'george']:
                 for g in range(pred_num_group):
                     group = pred_domains == g
 
@@ -1778,6 +1820,14 @@ def parse_args():
     parser.add_argument('--minimal_group_frac', default = 0.5, type = float)
     parser.add_argument('--lr_ei', default = 1e-3, type = float)
     parser.add_argument('--epoch_ei', default = 20, type = int)
+    parser.add_argument('--max_k', default = 4, type = int)
+    parser.add_argument('--overcluster_factor', default = 5, type = int)
+    parser.add_argument('--search_k', default = 1, type = int, choices = [0,1])
+    parser.add_argument('--n_components', default = 2, type = int)
+    parser.add_argument('--n_neighbors', default = 10, type = int)
+    parser.add_argument('--min_dist', default = 0, type = float)
+    parser.add_argument('--george_cluster_method', default = 'gmm', type = str, choices = ['gmm', 'kmeans'])
+    parser.add_argument('--metric_types', default = 'mean_loss', type = str, choices = ['mean_loss', 'composition'])
 
     args = parser.parse_args()
 
@@ -1818,6 +1868,14 @@ def main():
     minimal_group_frac = args.minimal_group_frac
     lr_ei = args.lr_ei
     epoch_ei = args.epoch_ei
+    max_k = args.max_k
+    overcluster_factor = args.overcluster_factor
+    search_k = args.search_k
+    n_components = args.n_compoenents
+    n_neighbors = args.n_neighbors
+    min_dist = args.min_dist
+    george_cluster_method = args.george_cluster_method
+    metric_types = args.metric_types
 
     if pred_groups_only:
         pred_groups_grass(
@@ -1871,6 +1929,14 @@ def main():
             minimal_group_frac,
             lr_ei,
             epoch_ei,
+            max_k,
+            overcluster_factor,
+            search_k,
+            n_components,
+            n_neighbors,
+            min_dist,
+            george_cluster_method,
+            metric_types,
         )
 
 if __name__ == '__main__':

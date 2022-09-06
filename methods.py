@@ -37,6 +37,8 @@ def exp_init(
     seed,
     method,
     device,
+    lr,
+    weight_decay,
 ):
     np.random.seed(seed)
     random.seed(seed)
@@ -107,7 +109,7 @@ def exp_init(
         seed = seed,
     )
 
-    if start_model_path and method in ['grass', 'eiil', 'cvar_doro']:
+    if start_model_path and method in ['grass', 'eiil', 'cvar_doro', 'george']:
         try: 
             m.load_state_dict(torch.load(start_model_path))
         except RuntimeError: 
@@ -116,9 +118,9 @@ def exp_init(
     m.to(device)
 
     if model == 'bert': 
-        optim = get_bert_optim(m, 1e-3, 1e-5)
+        optim = get_bert_optim(m, lr, weight_decay)
     else:
-        optim = torch.optim.Adam(get_parameters(m, model), lr=1e-3, weight_decay=1e-5)
+        optim = torch.optim.Adam(get_parameters(m, model), lr=lr, weight_decay=weight_decay)
     optim.zero_grad()
     
 
@@ -377,6 +379,7 @@ def get_domain_grass(
     process_grad,
     n,
 ):
+    m = deepcopy(m)
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     file_name = os.path.join(folder_name, 'pred_dict_outlier_%s.json' % outlier)
 
@@ -571,6 +574,7 @@ def get_domain_eiil(
     num_class,
     load_pred_dict,
 ):
+    m = deepcopy(m)
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d.json' % (outlier, lr_ei, epoch_ei))
 
@@ -676,6 +680,7 @@ def get_domain_george(
     metric_types = 'mean_loss', # ['mean_loss', 'composition']
     load_pred_dict = True
 ):
+    m = deepcopy(m)
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s.json' % (outlier, overcluster_factor))
 
@@ -1170,6 +1175,8 @@ def pred_groups_grass(
         seed,
         'grass',
         device,
+        1e-3,
+        1e-5,
     )
 
     grad_clustering_parallel(
@@ -1259,6 +1266,8 @@ def run_exp(
         seed,
         method,
         device,
+        lr,
+        weight_decay,
     )
 
     domain_loader = None
@@ -1548,7 +1557,7 @@ def run_exp(
             selected_epoch = selected_epoch,
             domain_loader = domain_loader,
         )
-
+    
     print('=============================================')
     print('|| selected the model from epoch %d ||' % selected_epoch)
     print('=============== Validation ===============')
@@ -1871,7 +1880,7 @@ def main():
     max_k = args.max_k
     overcluster_factor = args.overcluster_factor
     search_k = args.search_k
-    n_components = args.n_compoenents
+    n_components = args.n_components
     n_neighbors = args.n_neighbors
     min_dist = args.min_dist
     george_cluster_method = args.george_cluster_method

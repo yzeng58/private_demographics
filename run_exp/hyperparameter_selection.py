@@ -101,6 +101,13 @@ def main(args):
                 ' --minimal_group_frac ': [0.1, 0.2, 0.5],
                 ' --lr ': [1e-5, 1e-4],
                 ' --weight_decay ': [1e-1, 1],
+            },
+            'george': {
+                ' --epoch ': 360,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             }
         }
 
@@ -208,6 +215,13 @@ def main(args):
                 ' --epoch_ei ': 100,
                 ' --weight_decay ': [1e-3, 1e-4],
                 ' --load_pred_dict ': 0,
+            },
+            'george': {
+                ' --epoch ': 300,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [2e-5, 2e-4, 2e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2],
             },
         }
     

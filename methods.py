@@ -4,11 +4,11 @@ import torch, os, random, argparse, wandb, time, sys, umap
 from utils import *
 import numpy as np
 from sklearn.decomposition import PCA
+from models import *
 from datasets import read_data, LoadImageData, DomainLoader
 import torch.nn.functional as F
 from copy import deepcopy
 from collections import defaultdict
-from models import *
 from settings import *
 from transformers import get_scheduler
 from torch.utils.data import DataLoader

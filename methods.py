@@ -1,3 +1,4 @@
+from curses.ascii import isdigit
 from tqdm import tqdm
 import torch, os, random, argparse, wandb, time, sys, umap
 from utils import *
@@ -79,8 +80,6 @@ def exp_init(
         num_group = num_domain * num_class
     elif task == 'irm':
         num_group = num_domain
-
-    loader['train_supp_iter'] = iter(loader['train_supp'])
 
     if dataset_name == 'waterbirds':
         loader, num_feature = get_representation(
@@ -176,11 +175,42 @@ def collect_gradient(
     num_domain,
     num_group,
     task,
-    lr_q,
     lr_scheduler,
     dataset_name,
     num_class,
 ):
+    """
+    This function will return 
+
+    grad: np.array gradients 
+    true_domain: np.array true domain 
+    idx_class: np.array true class
+    true_group: np.array true subgroup
+    idx_mode: np.array the mode of the samples ('train' or 'val')
+
+    And will also save the numpy.array above into folder '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+
+    Parameters
+    -----------
+    model: the name of the models. Please refer the possible choices of model in settings.py. 
+            Actually, this parameter doesn't matter that much. 
+    m: the model. 
+    loader: dict: {
+        'train': data loader,
+        'val': data loader,
+        'test': data loader,
+    },
+    device: torch.device('cpu') or torch.device('cuda')
+    optim: torch.optimizer
+    num_domain: the number of domains
+    num_group: the number of groups (number of classes * number of domain)
+    task: 'fairness' or 'irm', always set as 'fairness'
+    lr_scheduler: set it as None unless you are using Bert
+    dataset_name: select the folder to save the results
+    num_class: the number of class
+    --------------
+    """
+
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     try:
         with open(os.path.join(folder_name, 'grad.npy'), 'rb') as f:
@@ -207,7 +237,7 @@ def collect_gradient(
             num_group,
             num_class,
             task,
-            lr_q,
+            0,
             None,
             1,
             lr_scheduler,
@@ -244,6 +274,8 @@ def collect_gradient(
         true_group = group_idx(true_domain, idx_class, num_domain)
         idx_mode = np.array(idx_mode)
 
+        if not os.path.isdir(folder_name):
+            os.mkdir(folder_name)
         print('Saving all the gradient information into folder %s...' % folder_name)
         with open(os.path.join(folder_name, 'grad.npy'), 'wb') as f:
             np.save(f, grad)
@@ -287,7 +319,6 @@ def grad_clustering_parallel(
         num_domain,
         num_group,
         task,
-        1e-3,
         lr_scheduler,
         dataset_name,
         num_class,
@@ -371,7 +402,6 @@ def get_domain_grass(
     num_domain, 
     num_group,
     task,
-    lr_q,
     lr_scheduler,
     load_pred_dict,
     clustering_path,
@@ -400,7 +430,6 @@ def get_domain_grass(
             num_domain,
             num_group,
             task,
-            lr_q,
             lr_scheduler,
             dataset_name,
             num_class,
@@ -481,6 +510,8 @@ def get_domain_grass(
 
                                 idx = idx_class == y
                                 idx[idx] = dbscan.labels_ >= 0
+                                print('print the number of groups')
+                                print(np.unique(dbscan.labels_))
                                 pred_domain[idx] = dbscan.labels_[dbscan.labels_ >= 0] + num_group
                                 # detect the outliers
                                 idx = idx_class == y
@@ -499,6 +530,7 @@ def get_domain_grass(
                     sil_mat.append(sil_row)
 
                 num_group = len(np.unique(pred_domain)) - int(-1 in pred_domain)
+                print("Number of group: %d" % num_group)
         
                 print(50 *'-')
                 print('DBSCAN: best ARS', max(arss), 'best NMI', max(nmis))
@@ -745,7 +777,7 @@ def get_domain_george(
         ars_score = ARS(true_group, pred_domain)
         pred_dict = {}
         pred_dict['ars'] = ars_score
-        pred_dict['num_group'] = len(np.unique(num_domain))
+        pred_dict['num_group'] = len(np.unique(pred_domain))
         for mode in ['train', 'val']:
             pred_dict[mode] = pred_domain[idx_mode == mode]
             pred_dict['n_%s' % mode] = []
@@ -879,14 +911,6 @@ def get_representation(
             )
         })
     return new_loader, new_data[mode]['features'].shape[1:]
-
-def get_supp(loader):
-    try:
-        i_supp, features_supp, labels_supp, domains_supp = loader['train_supp_iter'].next()
-    except StopIteration:
-        loader['train_supp_iter'] = iter(loader['train_supp'])
-        i_supp, features_supp, labels_supp, domains_supp = loader['train_supp_iter'].next()
-    return i_supp, features_supp, labels_supp, domains_supp
 
 def robust_reweight_groups(
     q,
@@ -1397,7 +1421,6 @@ def run_exp(
             num_domain, 
             num_group,
             task,
-            lr_q,
             lr_scheduler,
             load_pred_dict,
             clustering_path,

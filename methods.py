@@ -85,7 +85,7 @@ def exp_init(
         loader, num_feature = get_representation(
             'resnet50', 
             'waterbirds',
-            num_class,
+            outlier,
             loader, 
             device,
             batch_size,
@@ -884,13 +884,13 @@ def compute_fair_loss(
 def get_representation(
     model, 
     dataset_name,
-    num_class,
+    outlier,
     loader,
     device,
     batch_size,
     load_representations,
 ):
-    folder = '%s/privateDemographics/data/%s_%s_representation' % (root_dir, dataset_name, model)
+    folder = '%s/privateDemographics/data/%s_%s_outlier_%d_representation' % (root_dir, dataset_name, model, outlier)
 
     new_data = {}
     if load_representations:

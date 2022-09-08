@@ -1362,6 +1362,7 @@ def run_exp(
             'batch_size': batch_size,
             'outlier_frac': outlier_frac,
             'lr': lr,
+            'outlier': outlier,
         },
         'eiil': {
             'num_epoch': num_epoch,
@@ -1369,6 +1370,7 @@ def run_exp(
             'lr': lr,
             'lr_ei': lr_ei,
             'epoch_ei': epoch_ei,
+            'outlier': outlier,
         },
         'george': {
             'num_epoch': num_epoch,

@@ -115,7 +115,7 @@ def main(args):
         queue = 'x86_24h'
         task = 'fairness'
         cores = '4+1'
-        start_model_path = '%s/nhf_backup/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'  % root_dir
+        start_model_path = '%s/privateDemographics/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'  % root_dir
 
         param_grid = {
             'erm': {
@@ -131,12 +131,37 @@ def main(args):
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
+            'george': {
+                ' --epoch ': 10,
+                ' --batch_size ': 32,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
             'robust_dro': {
                 ' --epoch ': 10,
                 ' --batch_size ': 32,
                 ' --lr_q ': [.001, .01, .1],
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+            'cvar_doro': {
+                ' --epoch ': 10,
+                ' --batch_size ': 32,
+                ' --outlier_frac ': [0.005, 0.01, 0.02, 0.1, 0.2],
+                ' --minimal_group_frac ': [0.1, 0.2, 0.5],
+                ' --lr ': [1e-5, 1e-4],
+                ' --weight_decay ': [1e-1, 1e-2],
+            },
+            'eiil': {
+                ' --epoch ': 6,
+                ' --batch_size ': 32,
+                ' --lr_q ': [.01, .1],
+                ' --lr ': [1e-5, 1e-4],
+                ' --lr_ei ': [1e-4, 1e-3],
+                ' --epoch_ei ': 4,
+                ' --weight_decay ': [1e-3, 1e-2],
+                ' --load_pred_dict ': 0,
             },
         }
 

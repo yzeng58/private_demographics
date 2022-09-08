@@ -721,33 +721,77 @@ def get_domain_george(
         with open(file_name, 'r') as f:
             pred_dict = json.load(f)
     else:
-        inputs, true_domain, idx_mode, idx_class, losses = [], [], [], [], []
-        for mode in ['train', 'val']:
-            for batch_idx, features, labels, domains in tqdm(loader[mode], total = len(loader[mode]), desc = 'Loading Representation for %s set' % mode):
-                features, labels, domains = features.to(device), labels.to(device), domains.to(device)
-                outputs = m(features)
-                if len(outputs) == 2: _, outputs = outputs
-                loss = F.cross_entropy(outputs, labels, reduction = 'none')
-                losses.extend(list(map(lambda x: x.item(), loss)))
-                inputs.append(features)
-                true_domain.append(domains)
-                idx_class.append(labels)
-                idx_mode.extend([mode] * len(batch_idx))
+        try:
+            with open(os.path.join(folder_name, 'inputs.npy'), 'rb') as f:
+                inputs = np.load(f)
+            with open(os.path.join(folder_name, 'true_domain.npy'), 'rb') as f:
+                true_domain = np.load(f)
+            with open(os.path.join(folder_name, 'idx_class.npy'), 'rb') as f:
+                idx_class = np.load(f)
+            with open(os.path.join(folder_name, 'true_group.npy'), 'rb') as f:
+                true_group = np.load(f)
+            with open(os.path.join(folder_name, 'idx_mode.npy'), 'rb') as f:
+                idx_mode = np.load(f)
+            with open(os.path.join(folder_name, 'loss.npy'), 'rb') as f:
+                losses = np.load(f)
+            print('Loaded all the input information into folder %s...' % folder_name)
+        except:
+            inputs, true_domain, idx_mode, idx_class, losses = [], [], [], [], []
+            for mode in ['train', 'val']:
+                for batch_idx, features, labels, domains in tqdm(loader[mode], total = len(loader[mode]), desc = 'Loading Representation for %s set' % mode):
+                    features, labels, domains = features.to(device), labels.to(device), domains.to(device)
+                    outputs = m(features)
+                    if len(outputs) == 2: _, outputs = outputs
+                    loss = F.cross_entropy(outputs, labels, reduction = 'none')
+                    losses.extend(list(map(lambda x: x.item(), loss)))
+                    inputs.append(features)
+                    true_domain.append(domains)
+                    idx_class.append(labels)
+                    idx_mode.extend([mode] * len(batch_idx))
 
-        inputs = torch.cat(inputs).cpu()
-        true_domain = torch.cat(true_domain).cpu()
-        idx_class = torch.cat(idx_class).cpu()
-        true_group = group_idx(true_domain, idx_class, num_domain)
-        idx_mode = np.array(idx_mode)
-        inputs_trans = torch.zeros((inputs.shape[0], n_components))
-        losses = np.array(losses)
+            inputs = torch.cat(inputs).cpu()
+            true_domain = torch.cat(true_domain).cpu()
+            idx_class = torch.cat(idx_class).cpu()
+            true_group = group_idx(true_domain, idx_class, num_domain)
+            idx_mode = np.array(idx_mode)
+            losses = np.array(losses)
+
+            with open('%s/inputs.npy' % folder_name, 'wb') as f:
+                np.save(f, inputs)
+            with open('%s/loss.npy' % folder_name, 'wb') as f:
+                np.save(f, losses)
+            with open(os.path.join(folder_name, 'true_domain.npy'), 'wb') as f:
+                np.save(f, true_domain)
+            with open(os.path.join(folder_name, 'idx_class.npy'), 'wb') as f:
+                np.save(f, idx_class)
+            with open(os.path.join(folder_name, 'true_group.npy'), 'wb') as f:
+                np.save(f, true_group)
+            with open(os.path.join(folder_name, 'idx_mode.npy'), 'wb') as f:
+                np.save(f, idx_mode)
 
         print('UMAP dimension reduction...')
-        for y in range(num_class):
-            y_idx = idx_class == y
-            reducer = umap.UMAP(random_state = seed, n_components = n_components, n_neighbors = n_neighbors, min_dist = min_dist)
-            inputs_trans[y_idx] = torch.tensor(reducer.fit_transform(inputs[y_idx]))
 
+        inputs_trans = torch.zeros((inputs.shape[0], n_components))
+        inputs = torch.tensor(inputs)
+        true_domain = torch.tensor(true_domain)
+        idx_class = torch.tensor(idx_class)
+        true_group = torch.tensor(true_group)
+
+        try:
+            with open(os.path.join(folder_name, 'inputs_umap.npy'), 'rb') as f:
+                inputs_trans = np.load(f)
+
+        except:
+            for y in range(num_class):
+                y_idx = idx_class == y
+                reducer = umap.UMAP(random_state = seed, n_components = n_components, n_neighbors = n_neighbors, min_dist = min_dist)
+                # umap only process 2d array
+                inputs_2d = inputs[y_idx].reshape(inputs[y_idx].shape[0], np.prod(inputs[y_idx].shape[1:]))
+                inputs_trans[y_idx] = torch.tensor(reducer.fit_transform(inputs_2d))
+
+            with open(os.path.join(folder_name, 'inputs_umap.npy'), 'wb') as f:
+                np.save(f, inputs_trans)
+            
         cluster_model = OverclusterModel(
             cluster_method = cluster_method, 
             max_k = max_k, 
@@ -867,9 +911,6 @@ def get_representation(
             # remove the last layer
             m = torch.nn.Sequential(*list(m.children())[:-1])
 
-        elif model == 'bert':
-            m = get_bert(num_class, 'head')
-
         m.to(device)
         m.eval()
 
@@ -880,8 +921,6 @@ def get_representation(
                 features = features.to(device)
                 representations = m(features)
                 if model == 'resnet50':
-                    new_data[mode]['features'].append(representations.cpu().detach().squeeze())
-                elif model == 'bert':
                     new_data[mode]['features'].append(representations.cpu().detach().squeeze())
 
                 new_data[mode]['labels'].append(labels.detach())
@@ -1371,7 +1410,7 @@ def run_exp(
             )  
 
     best_criterion = torch.tensor(0., device = device)
-    selected_epoch, lr_scheduler = 0, None
+    selected_epoch = 0
 
     best_m = deepcopy(m)
 

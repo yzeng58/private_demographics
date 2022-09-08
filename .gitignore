@@ -13,6 +13,7 @@ figures/
 **/*.json
 **/*.yaml
 **/*.wandb
+**/*.tar
 
 *.out
 *.err

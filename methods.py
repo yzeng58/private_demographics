@@ -518,10 +518,10 @@ def get_domain_grass(
                                 idx[idx] = dbscan.labels_ < 0
                                 pred_domain[idx] = -1
 
-                        file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
+                        clustering_file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
                             y, min_samples, eps,
                         ))
-                        with open(file_name, 'wb') as f:
+                        with open(clustering_file_name, 'wb') as f:
                             np.save(f, dbscan.labels_)
                         print('\n')
                 

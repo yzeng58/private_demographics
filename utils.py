@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import torch, os, json, itertools, warnings
+import torch, os, json, itertools, warnings, logging
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
@@ -16,7 +16,6 @@ from collections import Counter
 from mpl_toolkits.mplot3d import Axes3D
 import seaborn as sns
 from settings import *
-import logging
 from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
 from sklearn.metrics.cluster._unsupervised import *

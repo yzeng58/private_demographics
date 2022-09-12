@@ -114,7 +114,11 @@ def exp_init(
         try: 
             m.load_state_dict(torch.load(start_model_path))
         except RuntimeError: 
-            print('CUDA device not available. Skip...')
+            print("""
+            Couldn't load the start_model_path. It might because of the following two reasons:
+            1. Couldn't load CUDA devices, and the model stored in start_model_path requires CUDA devices;
+            2. The start_model_path doesn not fit the current model architecture. 
+            """)
 
     m.to(device)
 
@@ -1188,7 +1192,7 @@ def gradient_descent(
             'loss': 0, 
             'q': q,
         }
-        
+
     features, labels, domains = features.to(device), labels.to(device), domains.to(device)
     output = m(features)
     if len(output) == 2: _, output = output
@@ -2160,7 +2164,7 @@ def parse_args():
     parser.add_argument('--min_dist', default = 0, type = float)
     parser.add_argument('--george_cluster_method', default = 'gmm', type = str, choices = ['gmm', 'kmeans'])
     parser.add_argument('--metric_types', default = 'mean_loss', type = str, choices = ['mean_loss', 'composition'])
-    parser.add_argument('--model', default = '', type = str, choices = models)
+    parser.add_argument('--model', default = 'default', type = str, choices = models)
     parser.add_argument('--collect_representation', default = 'grass', type = str, choices = ['grass', 'george'])
     parser.add_argument('--clustering_method', default = 'george', type = str, choices = ['grass', 'george'])
 
@@ -2211,7 +2215,7 @@ def main():
     min_dist = args.min_dist
     george_cluster_method = args.george_cluster_method
     metric_types = args.metric_types
-    model = args.model
+    model = args.model if args.model != 'default' else None
     collect_representation = args.collect_representation
     clustering_method = args.clustering_method
 

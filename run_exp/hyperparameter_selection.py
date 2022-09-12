@@ -12,7 +12,7 @@ def parse_args():
     parser.add_argument('--outlier', default = 0, type = int, choices = [0,1])
     parser.add_argument('--process_grad', default = 1, type = int, choices = [0,1])
     parser.add_argument('--run', default = 1, type = int, choices = [0,1])
-    parser.add_argument('--model', default = '', type = str, choices = models)
+    parser.add_argument('--model', default = 'default', type = str, choices = models)
     args = parser.parse_args()
     return args
 
@@ -57,7 +57,7 @@ def main(args):
         }
 
     elif dataset == 'waterbirds':
-        queue = 'x86_1h'
+        queue = 'x86_24h'
         task = 'fairness'
         cores = '2+1'
 
@@ -119,8 +119,8 @@ def main(args):
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
                 '': [
-                    ' --collect_representation grass --clustering_method george ',
-                    ' --collect_representation george --clustering_method grass '
+                    ' --collect_representation grass --clustering_method george',
+                    ' --collect_representation george --clustering_method grass'
                 ]
             }
         }
@@ -277,7 +277,7 @@ def main(args):
         ' --start_model_path ' + start_model_path +\
         ' --outlier ' + str(outlier) +\
         ' --process_grad ' + str(process_grad) +\
-        " --model '%s'" % model
+        ' --model ' + model
 
     cmd_list = [cmd_pre]
     

@@ -951,7 +951,6 @@ def get_domain_grass_george_mix(
 
         if clustering_method == 'grass':
             for y in range(num_class):
-                idx = idx_class == y
                 data_y = data[idx_class == y]
                 if process_data:
                     center = data_y.mean(axis=0)
@@ -960,7 +959,14 @@ def get_domain_grass_george_mix(
 
                 dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine')
                 dbscan.fit(data_y)
+                idx = idx_class == y
+                idx[idx] = dbscan.labels_ >= 0
                 pred_domain[idx] = dbscan.labels_[dbscan.labels_ >= 0] + num_group
+                # detect the outliers
+                idx = idx_class == y
+                idx[idx] = dbscan.labels_ < 0
+                pred_domain[idx] = -1
+
                 num_group = len(np.unique(pred_domain)) - int(-1 in pred_domain)
 
         elif clustering_method == 'george':
@@ -1177,6 +1183,12 @@ def gradient_descent(
     lr_scheduler = None,
     outlier_frac = 0.2,
 ):
+    if len(features) == 0:
+        return {
+            'loss': 0, 
+            'q': q,
+        }
+        
     features, labels, domains = features.to(device), labels.to(device), domains.to(device)
     output = m(features)
     if len(output) == 2: _, output = output
@@ -1755,11 +1767,13 @@ def run_exp(
             george_cluster_method,
             metric_types,
             load_pred_dict,
-            process_data,
+            process_grad,
             seed,
             batch_size,
         )
-        q = torch.ones(num_group, device = device)
+        domain_loader['train_iter'] = iter(domain_loader['train'])
+        domain_loader['val_iter'] = iter(domain_loader['val'])
+        q = torch.ones(domain_loader['num_group'], device = device)
     else:
         q = torch.ones(num_group, device = device)
 
@@ -2129,8 +2143,8 @@ def parse_args():
     parser.add_argument("--load_representations", default = 1, type = int, choices = [0,1])
     parser.add_argument("--clustering_path_use", default = 0, type = int, choices = [0,1])
     parser.add_argument('--clustering_y', default = 0, type = int)
-    parser.add_argument('--clustering_min_samples', default = 5, type = int)
-    parser.add_argument('--clustering_eps', default = 0.1, type = float)
+    parser.add_argument('--clustering_min_samples', default = 60, type = int)
+    parser.add_argument('--clustering_eps', default = 0.45, type = float)
     parser.add_argument('--outlier', default = 0, type = int, choices = [0,1])
     parser.add_argument('--process_grad', default = 1, type = int, choices = [0,1])
     parser.add_argument('--best_clustering_parameter', default = 1, type = int, choices = [0,1])

@@ -792,9 +792,10 @@ class OverclusterModel:
             sub_preds = cluster_obj.predict(sub_activ) + self.oc_fac * i
             oc_preds[orig_preds == i] = sub_preds
 
-            val_sub_activ = val_activ[val_orig_preds == i]
-            val_sub_preds = cluster_obj.predict(val_sub_activ) + self.oc_fac * i
-            val_oc_preds[val_orig_preds == i] = val_sub_preds
+            if (val_orig_preds == i).sum() > 0:
+                val_sub_activ = val_activ[val_orig_preds == i]
+                val_sub_preds = cluster_obj.predict(val_sub_activ) + self.oc_fac * i
+                val_oc_preds[val_orig_preds == i] = val_sub_preds
         return oc_preds, val_oc_preds
 
     def filter_overclusters(self, activ, losses, orig_preds, oc_preds, val_oc_preds):

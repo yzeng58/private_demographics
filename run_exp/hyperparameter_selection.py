@@ -119,8 +119,8 @@ def main(args):
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
                 '': [
-                    ' --collect representation grass --clustering_method george ',
-                    ' --collect representation george --clustering_method grass '
+                    ' --collect_representation grass --clustering_method george ',
+                    ' --collect_representation george --clustering_method grass '
                 ]
             }
         }

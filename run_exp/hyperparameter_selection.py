@@ -111,6 +111,17 @@ def main(args):
                 ' --lr_q ': [.001, .01, .1],
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+            'grass_george_mix': {
+                ' --epoch ': 360,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                '': [
+                    ' --collect representation grass --clustering_method george ',
+                    ' --collect representation george --clustering_method grass '
+                ]
             }
         }
 

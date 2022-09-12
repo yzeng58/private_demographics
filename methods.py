@@ -2147,7 +2147,8 @@ def parse_args():
     parser.add_argument('--george_cluster_method', default = 'gmm', type = str, choices = ['gmm', 'kmeans'])
     parser.add_argument('--metric_types', default = 'mean_loss', type = str, choices = ['mean_loss', 'composition'])
     parser.add_argument('--model', default = '', type = str, choices = models)
-
+    parser.add_argument('--collect_representation', default = 'grass', type = str, choices = ['grass', 'george'])
+    parser.add_argument('--clustering_method', default = 'george', type = str, choices = ['grass', 'george'])
 
     args = parser.parse_args()
 

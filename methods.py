@@ -293,6 +293,65 @@ def collect_gradient(
 
     return grad, true_domain, idx_class, true_group, idx_mode
 
+def collect_representations(
+    dataset_name,
+    loader,
+    device,
+    m,
+    num_domain,
+):
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+
+    try:
+        with open(os.path.join(folder_name, 'inputs.npy'), 'rb') as f:
+            inputs = np.load(f)
+        with open(os.path.join(folder_name, 'true_domain.npy'), 'rb') as f:
+            true_domain = np.load(f)
+        with open(os.path.join(folder_name, 'idx_class.npy'), 'rb') as f:
+            idx_class = np.load(f)
+        with open(os.path.join(folder_name, 'true_group.npy'), 'rb') as f:
+            true_group = np.load(f)
+        with open(os.path.join(folder_name, 'idx_mode.npy'), 'rb') as f:
+            idx_mode = np.load(f)
+        with open(os.path.join(folder_name, 'loss.npy'), 'rb') as f:
+            losses = np.load(f)
+        print('Loaded all the input information into folder %s...' % folder_name)
+    except:
+        inputs, true_domain, idx_mode, idx_class, losses = [], [], [], [], []
+        for mode in ['train', 'val']:
+            for batch_idx, features, labels, domains in tqdm(loader[mode], total = len(loader[mode]), desc = 'Loading Representation for %s set' % mode):
+                features, labels, domains = features.to(device), labels.to(device), domains.to(device)
+                outputs = m(features)
+                if len(outputs) == 2: _, outputs = outputs
+                loss = F.cross_entropy(outputs, labels, reduction = 'none')
+                losses.extend(list(map(lambda x: x.item(), loss)))
+                inputs.append(features)
+                true_domain.append(domains)
+                idx_class.append(labels)
+                idx_mode.extend([mode] * len(batch_idx))
+
+        inputs = np.array(torch.cat(inputs).cpu())
+        true_domain = np.array(torch.cat(true_domain).cpu())
+        idx_class = np.array(torch.cat(idx_class).cpu())
+        true_group = group_idx(true_domain, idx_class, num_domain)
+        idx_mode = np.array(idx_mode)
+        losses = np.array(losses)
+
+        with open('%s/inputs.npy' % folder_name, 'wb') as f:
+            np.save(f, inputs)
+        with open('%s/loss.npy' % folder_name, 'wb') as f:
+            np.save(f, losses)
+        with open(os.path.join(folder_name, 'true_domain.npy'), 'wb') as f:
+            np.save(f, true_domain)
+        with open(os.path.join(folder_name, 'idx_class.npy'), 'wb') as f:
+            np.save(f, idx_class)
+        with open(os.path.join(folder_name, 'true_group.npy'), 'wb') as f:
+            np.save(f, true_group)
+        with open(os.path.join(folder_name, 'idx_mode.npy'), 'wb') as f:
+            np.save(f, idx_mode)
+
+    return inputs, true_domain, idx_class, true_group, idx_mode, losses
+
 def grad_clustering_parallel(
     m,
     loader, 
@@ -723,53 +782,13 @@ def get_domain_george(
         with open(file_name, 'r') as f:
             pred_dict = json.load(f)
     else:
-        try:
-            with open(os.path.join(folder_name, 'inputs.npy'), 'rb') as f:
-                inputs = np.load(f)
-            with open(os.path.join(folder_name, 'true_domain.npy'), 'rb') as f:
-                true_domain = np.load(f)
-            with open(os.path.join(folder_name, 'idx_class.npy'), 'rb') as f:
-                idx_class = np.load(f)
-            with open(os.path.join(folder_name, 'true_group.npy'), 'rb') as f:
-                true_group = np.load(f)
-            with open(os.path.join(folder_name, 'idx_mode.npy'), 'rb') as f:
-                idx_mode = np.load(f)
-            with open(os.path.join(folder_name, 'loss.npy'), 'rb') as f:
-                losses = np.load(f)
-            print('Loaded all the input information into folder %s...' % folder_name)
-        except:
-            inputs, true_domain, idx_mode, idx_class, losses = [], [], [], [], []
-            for mode in ['train', 'val']:
-                for batch_idx, features, labels, domains in tqdm(loader[mode], total = len(loader[mode]), desc = 'Loading Representation for %s set' % mode):
-                    features, labels, domains = features.to(device), labels.to(device), domains.to(device)
-                    outputs = m(features)
-                    if len(outputs) == 2: _, outputs = outputs
-                    loss = F.cross_entropy(outputs, labels, reduction = 'none')
-                    losses.extend(list(map(lambda x: x.item(), loss)))
-                    inputs.append(features)
-                    true_domain.append(domains)
-                    idx_class.append(labels)
-                    idx_mode.extend([mode] * len(batch_idx))
-
-            inputs = torch.cat(inputs).cpu()
-            true_domain = torch.cat(true_domain).cpu()
-            idx_class = torch.cat(idx_class).cpu()
-            true_group = group_idx(true_domain, idx_class, num_domain)
-            idx_mode = np.array(idx_mode)
-            losses = np.array(losses)
-
-            with open('%s/inputs.npy' % folder_name, 'wb') as f:
-                np.save(f, inputs)
-            with open('%s/loss.npy' % folder_name, 'wb') as f:
-                np.save(f, losses)
-            with open(os.path.join(folder_name, 'true_domain.npy'), 'wb') as f:
-                np.save(f, true_domain)
-            with open(os.path.join(folder_name, 'idx_class.npy'), 'wb') as f:
-                np.save(f, idx_class)
-            with open(os.path.join(folder_name, 'true_group.npy'), 'wb') as f:
-                np.save(f, true_group)
-            with open(os.path.join(folder_name, 'idx_mode.npy'), 'wb') as f:
-                np.save(f, idx_mode)
+        inputs, true_domain, idx_class, true_group, idx_mode, losses = collect_representations(
+            dataset_name,
+            loader,
+            device,
+            m,
+            num_domain,
+        )
 
         print('UMAP dimension reduction...')
 
@@ -854,7 +873,184 @@ def get_domain_george(
             'val': torch.tensor(pred_dict['n_val'], device = device),
         },
     }
-    
+
+def get_domain_grass_george_mix(
+    model, 
+    m,
+    loader,
+    device,
+    optim,
+    num_domain,
+    num_group,
+    task,
+    lr_scheduler,
+    dataset_name,
+    num_class,
+    max_k, 
+    outlier = False,
+    collect_representation = 'grass',
+    clustering_method = 'george',
+    eps = .4,
+    min_samples = 60,
+    overcluster_factor = 5,
+    search_k = True,
+    n_components = 2,
+    n_neighbors = 10,
+    min_dist = 0,
+    george_cluster_method = 'gmm',
+    metric_types = 'mean_loss',
+    load_pred_dict = True,
+    process_data = True,
+    seed = 123,
+    batch_size = 128,
+):  
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d.json' % (
+        collect_representation, 
+        clustering_method,
+        outlier, 
+        overcluster_factor,
+        eps,
+        min_samples,
+    ))
+
+    if os.path.isfile(file_name) and load_pred_dict:
+        print('Loading estimated domains from %s' % file_name)
+        with open(file_name, 'r') as f:
+            pred_dict = json.load(f)
+
+    else:
+        grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
+            model,
+            m,
+            loader,
+            device, 
+            optim,
+            num_domain,
+            num_group,
+            task,
+            lr_scheduler,
+            dataset_name,
+            num_class,
+        )
+        
+        inputs, true_domain, idx_class, true_group, idx_mode, losses = collect_representations(
+            dataset_name,
+            loader,
+            device,
+            m,
+            num_domain,
+        )
+
+        if collect_representation == 'grass':
+            data = grad
+        elif collect_representation == 'george':
+            data = inputs
+
+        pred_domain = np.zeros(true_domain.shape)
+        num_group = 0
+
+        if clustering_method == 'grass':
+            for y in range(num_class):
+                idx = idx_class == y
+                data_y = data[idx_class == y]
+                if process_data:
+                    center = data_y.mean(axis=0)
+                    data_y = data_y - center
+                    data_y = normalize(data_y)
+
+                dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine')
+                dbscan.fit(data_y)
+                pred_domain[idx] = dbscan.labels_[dbscan.labels_ >= 0] + num_group
+                num_group = len(np.unique(pred_domain)) - int(-1 in pred_domain)
+
+        elif clustering_method == 'george':
+            print('UMAP dimension reduction...')
+
+            data_trans = torch.zeros((data.shape[0], n_components))
+            data = torch.tensor(data)
+            true_domain = torch.tensor(true_domain)
+            idx_class = torch.tensor(idx_class)
+            true_group = torch.tensor(true_group)
+
+            try:
+                with open(os.path.join(folder_name, '%s_umap.npy' % collect_representation), 'rb') as f:
+                    data_trans = np.load(f)
+
+            except:
+                for y in range(num_class):
+                    y_idx = idx_class == y
+                    reducer = umap.UMAP(random_state = seed, n_components = n_components, n_neighbors = n_neighbors, min_dist = min_dist)
+                    # umap only process 2d array
+                    data_2d = data[y_idx].reshape(data[y_idx].shape[0], np.prod(data[y_idx].shape[1:]))
+                    data_trans[y_idx] = torch.tensor(reducer.fit_transform(data_2d))
+
+                with open(os.path.join(folder_name, '%s_umap.npy' % collect_representation), 'wb') as f:
+                    np.save(f, data_trans)
+
+            cluster_model = OverclusterModel(
+                cluster_method = george_cluster_method, 
+                max_k = max_k, 
+                seed = seed, 
+                sil_cuda = False,
+                search = search_k,
+                oc_fac = overcluster_factor,
+            )
+
+            c_trainer = GEORGECluster(metric_types, superclasses_to_ignore = [])
+            group_to_models = c_trainer.train(
+                cluster_model, 
+                data_trans,
+                idx_mode,
+                idx_class,
+                num_class,
+                losses,
+            )
+
+            pred_domain = c_trainer.evaluate(
+                group_to_models, 
+                data_trans,
+                idx_class,
+                num_class,
+            )
+            num_group = len(np.unique(pred_domain))
+
+        ars_score = ARS(true_group, pred_domain)
+        pred_dict = {}
+        pred_dict['ars'] = ars_score
+        pred_dict['num_group'] = len(np.unique(pred_domain))
+        for mode in ['train', 'val']:
+            pred_dict[mode] = pred_domain[idx_mode == mode]
+            pred_dict['n_%s' % mode] = []
+            for g in range(pred_dict['num_group']):
+                group = pred_dict[mode] == g
+                pred_dict['n_%s' % mode].append(int(group.sum()))
+            pred_dict[mode] = pred_dict[mode].tolist()
+
+        with open(file_name, 'w') as f:
+            json.dump(pred_dict, f)          
+        print('Estimated domains are saved in %s' % file_name)
+                
+    print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
+    return {
+        'train': DataLoader(
+            DomainLoader(pred_dict['train']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'val': DataLoader(
+            DomainLoader(pred_dict['val']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'num_group': pred_dict['num_group'],
+        'n': {
+            'train': torch.tensor(pred_dict['n_train'], device = device),
+            'val': torch.tensor(pred_dict['n_val'], device = device),
+        },
+    }
+
+
 def compute_ay(group_idx, num_domain):
     a = group_idx % num_domain
     y = group_idx // num_domain

@@ -2198,6 +2198,8 @@ def main():
     george_cluster_method = args.george_cluster_method
     metric_types = args.metric_types
     model = args.model
+    collect_representation = args.collect_representation
+    clustering_method = args.clustering_method
 
     if pred_groups_only:
         pred_groups_grass(
@@ -2261,6 +2263,8 @@ def main():
             george_cluster_method,
             metric_types,
             model,
+            collect_representation,
+            clustering_method,
         )
 
 if __name__ == '__main__':

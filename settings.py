@@ -21,6 +21,7 @@ models = [
     'cmnist_mlp',
     'logreg',
     'bert_last_layer',
+    '',
 ]
 
 datasets = [

@@ -12,6 +12,7 @@ def parse_args():
     parser.add_argument('--outlier', default = 0, type = int, choices = [0,1])
     parser.add_argument('--process_grad', default = 1, type = int, choices = [0,1])
     parser.add_argument('--run', default = 1, type = int, choices = [0,1])
+    parser.add_argument('--model', default = '', type = str, choices = models)
     args = parser.parse_args()
     return args
 
@@ -24,6 +25,7 @@ def main(args):
     mem = '16g'
     outlier = args.outlier
     process_grad = args.process_grad
+    model = args.model
 
     if dataset == 'synthetic':
         cores = '2+1'
@@ -58,6 +60,7 @@ def main(args):
         queue = 'x86_1h'
         task = 'fairness'
         cores = '2+1'
+
         if outlier:
             start_model_path = '%s/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_outlier_1_weight_decay_0.0001_best.model' % root_dir
         else:
@@ -262,7 +265,8 @@ def main(args):
         ' --task ' + task +\
         ' --start_model_path ' + start_model_path +\
         ' --outlier ' + str(outlier) +\
-        ' --process_grad ' + str(process_grad)
+        ' --process_grad ' + str(process_grad) +\
+        " --model '%s'" % model
 
     cmd_list = [cmd_pre]
     

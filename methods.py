@@ -40,6 +40,7 @@ def exp_init(
     device,
     lr,
     weight_decay,
+    model,
 ):
     np.random.seed(seed)
     random.seed(seed)
@@ -82,24 +83,25 @@ def exp_init(
         num_group = num_domain
 
     if dataset_name == 'waterbirds':
-        loader, num_feature = get_representation(
-            'resnet50', 
-            'waterbirds',
-            outlier,
-            loader, 
-            device,
-            batch_size,
-            load_representations,
-        )
-       
-        num_feature = num_feature[0]
-        model = 'logreg'
+        if not model: 
+            loader, num_feature = get_representation(
+                'resnet50', 
+                'waterbirds',
+                outlier,
+                loader, 
+                device,
+                batch_size,
+                load_representations,
+            )
+        
+            num_feature = num_feature[0]
+            model = 'logreg'
 
     elif dataset_name in ['civilcomments', 'multinli']:
-        model = 'bert'
+        if not model: model = 'bert'
     
     elif dataset_name in ['synthetic', 'compas']:
-        model = 'mlp'
+        if not model: model = 'mlp'
 
     m = load_model(
         model = model,
@@ -1211,6 +1213,7 @@ def pred_groups_grass(
     log_wandb = False,
     outlier = False,
     process_grad = True,
+    model = None,
 ):
     [
         m,
@@ -1240,6 +1243,7 @@ def pred_groups_grass(
         device,
         1e-3,
         1e-5,
+        model,
     )
 
     grad_clustering_parallel(
@@ -1301,6 +1305,7 @@ def run_exp(
     min_dist = 0,
     george_cluster_method = 'gmm',
     metric_types = 'mean_loss',
+    model = None,
 ):
 
     (   
@@ -1331,6 +1336,7 @@ def run_exp(
         device,
         lr,
         weight_decay,
+        model,
     )
 
     domain_loader = None
@@ -1341,28 +1347,24 @@ def run_exp(
             'batch_size': batch_size,
             'lr': lr,
             'subsample': subsample,
-            'outlier': outlier,
         },
         'grass': {
             'num_epoch': num_epoch,
             'batch_size': batch_size,
             'lr_q': lr_q,
             'lr': lr,
-            'outlier': outlier,
         },
         'robust_dro': {
             'num_epoch': num_epoch,
             'batch_size': batch_size,
             'lr_q': lr_q,
             'lr': lr,
-            'outlier': outlier,
         },
         'cvar_doro': {
             'num_epoch': num_epoch,
             'batch_size': batch_size,
             'outlier_frac': outlier_frac,
             'lr': lr,
-            'outlier': outlier,
         },
         'eiil': {
             'num_epoch': num_epoch,
@@ -1370,21 +1372,23 @@ def run_exp(
             'lr': lr,
             'lr_ei': lr_ei,
             'epoch_ei': epoch_ei,
-            'outlier': outlier,
         },
         'george': {
             'num_epoch': num_epoch,
             'batch_size': batch_size,
             'lr_q': lr_q,
             'lr': lr,
-            'outlier': outlier,
             'max_k': max_k,
             'overcluster_factor': overcluster_factor,
             'george_cluster_method': george_cluster_method,
         }
     }
 
-    params[method].update({'weight_decay': weight_decay})
+    params[method].update({
+        'weight_decay': weight_decay,
+        'outlier': outlier,
+        'model': model,
+    })
 
     if log_wandb:
         if method == 'erm' and subsample:
@@ -1901,6 +1905,8 @@ def parse_args():
     parser.add_argument('--min_dist', default = 0, type = float)
     parser.add_argument('--george_cluster_method', default = 'gmm', type = str, choices = ['gmm', 'kmeans'])
     parser.add_argument('--metric_types', default = 'mean_loss', type = str, choices = ['mean_loss', 'composition'])
+    parser.add_argument('--model', default = '', type = str, choices = models)
+
 
     args = parser.parse_args()
 
@@ -1949,6 +1955,7 @@ def main():
     min_dist = args.min_dist
     george_cluster_method = args.george_cluster_method
     metric_types = args.metric_types
+    model = args.model
 
     if pred_groups_only:
         pred_groups_grass(
@@ -1969,6 +1976,7 @@ def main():
             log_wandb,
             outlier,
             process_grad,
+            model,
         )
     else:
         run_exp(
@@ -2010,6 +2018,7 @@ def main():
             min_dist,
             george_cluster_method,
             metric_types,
+            model,
         )
 
 if __name__ == '__main__':

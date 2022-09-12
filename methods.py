@@ -110,7 +110,7 @@ def exp_init(
         seed = seed,
     )
 
-    if start_model_path and method in ['grass', 'eiil', 'cvar_doro', 'george']:
+    if start_model_path and method in ['grass', 'eiil', 'cvar_doro', 'george', 'grass_george_mix']:
         try: 
             m.load_state_dict(torch.load(start_model_path))
         except RuntimeError: 
@@ -123,7 +123,6 @@ def exp_init(
     else:
         optim = torch.optim.Adam(get_parameters(m, model), lr=lr, weight_decay=weight_decay)
     optim.zero_grad()
-    
 
     if model == 'bert':
         num_batches = len(loader['train'])
@@ -1050,7 +1049,6 @@ def get_domain_grass_george_mix(
         },
     }
 
-
 def compute_ay(group_idx, num_domain):
     a = group_idx % num_domain
     y = group_idx // num_domain
@@ -1185,10 +1183,10 @@ def gradient_descent(
 
     if mode in ['standard']:
         loss = F.cross_entropy(output, labels, reduction = 'sum')
-    elif mode in ['grass', 'robust_dro', 'george']:
+    elif mode in ['grass', 'robust_dro', 'george', 'grass_george_mix']:
         loss_g = torch.zeros(num_group, device = device)
         for g in range(num_group):
-            if task == 'irm' or mode in ['grass', 'george']:
+            if task == 'irm' or mode in ['grass', 'george', 'grass_george_mix']:
                 group = domains == g
             elif task == 'fairness':
                 a, y = domain_class_idx(g, num_domain)
@@ -1285,7 +1283,7 @@ def run_epoch(
             )
             
 
-    elif method in ['grass', 'george']:
+    elif method in ['grass', 'george', 'grass_george_mix']:
         results = {'q': q}
         for _, features, labels, domains in tqdm_object:
             pred_domain = get_pred_domain(domain_loader, 'train')
@@ -1502,6 +1500,8 @@ def run_exp(
     george_cluster_method = 'gmm',
     metric_types = 'mean_loss',
     model = None,
+    collect_representation = 'grass',
+    clustering_method = 'george',
 ):
 
     (   
@@ -1577,6 +1577,19 @@ def run_exp(
             'max_k': max_k,
             'overcluster_factor': overcluster_factor,
             'george_cluster_method': george_cluster_method,
+        },
+        'grass_george_mix': {
+            'num_epoch': num_epoch,
+            'batch_size': batch_size,
+            'lr_q': lr_q,
+            'lr': lr,
+            'collect_representation': collect_representation,
+            'clustering_method': clustering_method,
+            'max_k': max_k,
+            'overcluster_factor': overcluster_factor,
+            'george_cluster_method': george_cluster_method,
+            'eps': eps,
+            'min_samples': min_samples,
         }
     }
 
@@ -1715,6 +1728,38 @@ def run_exp(
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
         q = torch.ones(domain_loader['num_group'], device = device)
+    elif method == 'grass_george_mix':
+        domain_loader  = get_domain_grass_george_mix(
+            model, 
+            m,
+            loader,
+            device,
+            optim,
+            num_domain,
+            num_group,
+            task,
+            lr_scheduler,
+            dataset_name,
+            num_class,
+            max_k, 
+            outlier,
+            collect_representation,
+            clustering_method,
+            eps,
+            min_samples,
+            overcluster_factor,
+            search_k,
+            n_components,
+            n_neighbors,
+            min_dist,
+            george_cluster_method,
+            metric_types,
+            load_pred_dict,
+            process_data,
+            seed,
+            batch_size,
+        )
+        q = torch.ones(num_group, device = device)
     else:
         q = torch.ones(num_group, device = device)
 
@@ -1903,7 +1948,7 @@ def inference(
     domain_loss = torch.zeros(num_group, device = device)
 
     if mode in ['train', 'val'] and domain_loader:
-        if method in ['grass', 'george']:
+        if method in ['grass', 'george', 'grass_george_mix']:
             pred_num_group = domain_loader['num_group'] 
         elif method == 'eiil':
             pred_num_group = domain_loader['num_domain'] * num_class
@@ -1934,7 +1979,7 @@ def inference(
         avg_acc += torch.sum(bool_correct).item()
 
         if mode in ['train', 'val'] and domain_loader:
-            if method in ['grass', 'george']:
+            if method in ['grass', 'george', 'grass_george_mix']:
                 for g in range(pred_num_group):
                     group = pred_domains == g
 

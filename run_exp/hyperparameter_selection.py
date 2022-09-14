@@ -61,10 +61,16 @@ def main(args):
         task = 'fairness'
         cores = '2+1'
 
-        if outlier:
-            start_model_path = '%s/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_outlier_1_weight_decay_0.0001_best.model' % root_dir
-        else:
-            start_model_path = '%s/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_1e-05_subsample_False_weight_decay_1_best.model' % root_dir
+        if model == 'default':
+            if outlier:
+                start_model_path = '%s/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_outlier_1_weight_decay_0.0001_best.model' % root_dir
+            else:
+                start_model_path = '%s/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_1e-05_subsample_False_weight_decay_1_best.model' % root_dir
+        elif model == 'resnet50':
+            if outlier:
+                start_model_path = "%s/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_weight_decay_0.1_outlier_1_model_resnet50_best.model" % root_dir
+            else:
+                start_model_path = "''"
 
         param_grid = {
             'erm': {

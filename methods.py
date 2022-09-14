@@ -355,41 +355,18 @@ def collect_representations(
 
     return inputs, true_domain, idx_class, true_group, idx_mode, losses
 
-def grad_clustering_parallel(
-    m,
-    loader, 
-    device,
-    optim,
-    model,
+def grass_clustering(
+    grad,
     dataset_name,
-    num_domain, 
-    num_group,
-    task,
-    lr_scheduler,
     eps,
     min_samples,
     y,
     log_wandb,
     outlier,
     process_grad,
-    num_class,
+    idx_class,
+    true_domain,
 ):      
-    grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
-        model,
-        m,
-        loader,
-        device, 
-        optim,
-        num_domain,
-        num_group,
-        task,
-        lr_scheduler,
-        dataset_name,
-        num_class,
-    )
-
-    num_group = 0
-
     if log_wandb:
         try:
             wandb.init(
@@ -427,6 +404,7 @@ def grad_clustering_parallel(
     ars = ARS(true_domain_y, dbscan_labels)
     nmi = NMI(true_domain_y, dbscan_labels)
     iou, iou2, eq = iou_adaptive(true_domain_y, dbscan_labels)
+    ss = silhouette_score(grad_y, dbscan_labels)
 
     val = sum(iou) + sum(iou2) + iou[1] + iou2[0] + (iou[2] +iou2[2] ) /2
     val /= 9
@@ -446,6 +424,7 @@ def grad_clustering_parallel(
             'nmi': nmi,
             'val': val,
             'eq': eq,
+            'ss': ss, 
             'outlier_proportion': (pred_domain_y == -1).mean(),
             'max_proportion': group_stat[1].max()/group_stat[1].sum(),
             'min_proportion': group_stat[1].min()/group_stat[1].sum(),
@@ -453,6 +432,7 @@ def grad_clustering_parallel(
         }
         wandb.log(wandb_log_dict)
         wandb.finish()
+    return ars, nmi, val, iou, iou2, eq, ss, dbscan_labels
 
 def get_domain_grass(
     m,
@@ -471,11 +451,11 @@ def get_domain_grass(
     clustering_path,
     outlier,
     process_grad,
-    n,
+    use_val_group,
 ):
     m = deepcopy(m)
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-    file_name = os.path.join(folder_name, 'pred_dict_outlier_%s.json' % outlier)
+    file_name = os.path.join(folder_name, 'pred_dict_outlier_%s_val_%d.json' % (outlier, use_val_group))
 
     if load_pred_dict: 
         with open(file_name, 'r') as f:
@@ -525,73 +505,74 @@ def get_domain_grass(
                     grad_y = normalize(grad_y)
                 dist = cosine_dist(grad_y, grad_y)
 
-                clusterings, arss, nmis, ious, ious2 = [], [], [], [], []
-                chi_mat, dbs_mat, sil_mat= [], [], []
+                clusterings, arss, nmis, ious, ious2, sss = [], [], [], [], [], []
                 best_dbscan_params = {}
                 best_mean = -np.inf
+                best_ss = -1
 
                 true_domain_y = true_domain[idx_class == y]
 
                 for eps in np.linspace(0.1, 0.7, 13):
-                    chi_row, dbs_row, sil_row = [], [], []
                     for min_samples in [5, 10, 20, 30, 40, 50, 60, 100]:
-                        dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed')
-                        dbscan.fit(dist)
 
-                        try:
-                            chi, dbs, sil = internal_evals(grad, dist, dbscan.labels_)
-                            chi_row.append(chi)
-                            dbs_row.append(dbs)
-                            sil_row.append(sil)
-                            clusterings.append(dbscan.labels_)
-                        except:
-                            chi_row.append(np.nan)
-                            dbs_row.append(np.nan)
-                            sil_row.append(np.nan)
-                            clusterings.append(None)
+                        ars, nmi, val, iou, iou2, eq, ss, dbscan_labels = grass_clustering(
+                            grad,
+                            dataset_name,
+                            eps,
+                            min_samples,
+                            y,
+                            False,
+                            outlier,
+                            process_grad,
+                            idx_class,
+                            true_domain,
+                        )
 
                         print('Eps', eps, 'Min samples', min_samples)
-                        print('Cluster counts', np.unique(dbscan.labels_, return_counts=True))
+                        print('Cluster counts', np.unique(dbscan_labels, return_counts=True))
                 
-                        ars = ARS(true_domain_y, dbscan.labels_)
                         arss.append(ars)
-                        nmi = NMI(true_domain_y, dbscan.labels_)
                         nmis.append(nmi)
-                        print('ARS', ars, 'NMI', nmi)
-                
-                        iou, iou2, eq = iou_adaptive(true_domain_y, dbscan.labels_)
-                        ious.append(iou)
-                        ious2.append(iou2)
-                
-                        if eq:
-                            val = sum(iou) + sum(iou2) + iou[1] + iou2[0] + (iou[2] +iou2[2] ) /2
-                            val /= 9
-                            print("Weighted avg", val)
-                            if val > best_mean:
-                                best_mean = val
-                                best_dbscan_params['eps'] = eps
-                                best_dbscan_params['min_samples'] = min_samples
+                        sss.append(ss)
 
-                                idx = idx_class == y
-                                idx[idx] = dbscan.labels_ >= 0
-                                print('print the number of groups')
-                                print(np.unique(dbscan.labels_))
-                                pred_domain[idx] = dbscan.labels_[dbscan.labels_ >= 0] + num_group
-                                # detect the outliers
-                                idx = idx_class == y
-                                idx[idx] = dbscan.labels_ < 0
-                                pred_domain[idx] = -1
+                        print('ARS', ars, 'NMI', nmi, 'Silhouette Score', ss)
+                
+                        update_pred_domain = False
+                        if use_val_group:
+                            ious.append(iou)
+                            ious2.append(iou2)
+
+                            if eq:
+                                print("Weighted avg", val)
+                                if val > best_mean:
+                                    update_pred_domain = True
+
+                        else:
+                            if ss > best_ss:
+                                update_pred_domain = True
+                                
+                        if update_pred_domain:
+                            best_mean = val
+                            best_dbscan_params['eps'] = eps
+                            best_dbscan_params['min_samples'] = min_samples
+
+                            idx = idx_class == y
+                            idx[idx] = dbscan_labels >= 0
+                            print('print the number of groups')
+                            print(np.unique(dbscan_labels))
+                            pred_domain[idx] = dbscan_labels[dbscan_labels >= 0] + num_group
+                            # detect the outliers
+                            idx = idx_class == y
+                            idx[idx] = dbscan_labels < 0
+                            pred_domain[idx] = -1
+                            
 
                         clustering_file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
                             y, min_samples, eps,
                         ))
                         with open(clustering_file_name, 'wb') as f:
-                            np.save(f, dbscan.labels_)
+                            np.save(f, dbscan_labels)
                         print('\n')
-                
-                    chi_mat.append(chi_row)
-                    dbs_mat.append(dbs_row)
-                    sil_mat.append(sil_row)
 
                 num_group = len(np.unique(pred_domain)) - int(-1 in pred_domain)
                 print("Number of group: %d" % num_group)
@@ -610,21 +591,6 @@ def get_domain_grass(
         pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
         pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
         pred_dict['ars']   = ars_score
-
-        # visualize_internal_evals(
-        #     chi_mat, 
-        #     dbs_mat, 
-        #     sil_mat,
-        #     x_axis_labels,
-        #     y_axis_labels,
-        # )
-
-        # nmi_matrix(
-        #     clusterings,
-        #     x_axis_labels,
-        #     y_axis_labels,
-        # )
-
         pred_dict['num_group'] = num_group
 
         for mode in ['train', 'val']:
@@ -656,6 +622,122 @@ def get_domain_grass(
         },
     }
 
+def eiil_clustering(
+    dataset_name,
+    outlier,
+    log_wandb,
+    lr_ei,
+    loader,
+    device,
+    epoch_ei,
+    m, 
+    model,
+    num_domain,
+    num_class,
+    file_name,
+):
+    if log_wandb:
+        try:
+            wandb.init(
+                project = 'privateDemographics',
+                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
+                config = {'lr_ei': lr_ei},
+                job_type = 'eiil'
+            )
+        except:
+            import wandb
+            wandb.init(
+                project = 'privateDemographics',
+                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
+                config = {'lr_ei': lr_ei},
+                job_type = 'eiil'
+            )
+    
+    best_pred_domain = None
+    lowest_penalty = np.inf 
+    true_domain, idx_mode, idx_class = [], [], []
+    for i in range(epoch_ei):
+        final_npenalty = 0
+        pred_domain = []
+        for mode in ['train', 'val']:
+            for batch_idx, features, labels, domains in tqdm(loader[mode], total = len(loader[mode]), desc='Train Set Domain Predicting'):
+                if i == 0:
+                    true_domain.append(domains.numpy())
+                    idx_mode.extend([mode] * len(batch_idx))
+                    idx_class.append(labels.numpy())
+                pred_domain_ = torch.randn(len(features), device = device).requires_grad_()
+                optim_group = torch.optim.Adam([pred_domain_], lr=lr_ei)
+
+                features, labels = features.to(device), labels.to(device)
+                output = m(features)
+                if len(output) == 2: _, output = output
+                loss = F.cross_entropy(output, labels, reduction = 'none')
+
+                error_a = (loss * pred_domain_.sigmoid()).mean()
+                error_b = (loss * (1-pred_domain_.sigmoid())).mean()
+
+                penalty_a = grad(error_a, get_parameters(m, model), create_graph=True)[0].pow(2).mean()
+                penalty_b = grad(error_b, get_parameters(m, model), create_graph=True)[0].pow(2).mean()
+                
+                npenalty = - torch.stack([penalty_a, penalty_b]).mean()
+
+                optim_group.zero_grad()
+                npenalty.backward(retain_graph=True)
+                optim_group.step()
+
+                final_npenalty += npenalty
+               
+                pred_domain_ = pred_domain_.detach()
+                pred_domain_[pred_domain_ > 0.5] = 1
+                pred_domain_[pred_domain_ <= 0.5] = 0
+                pred_domain.append(pred_domain_.cpu().detach().numpy())
+
+        if final_npenalty < lowest_penalty:
+            lowest_penalty = final_npenalty
+            best_pred_domain = pred_domain
+
+    true_domain = np.concatenate(true_domain)
+    idx_class = np.concatenate(idx_class)
+    true_group = group_idx(true_domain, idx_class, num_domain)
+    idx_mode = np.array(idx_mode)
+    pred_domain =  np.concatenate(best_pred_domain)
+
+    ars_score = ARS(true_group, pred_domain)
+
+    if log_wandb:
+        group_stat = np.unique(pred_domain, return_counts = True)
+        wandb_log_dict = {
+            'ars': ars_score,
+            'lowest_penalty': lowest_penalty, 
+            'max_proportion': group_stat[1].max()/group_stat[1].sum(),
+            'min_proportion': group_stat[1].min()/group_stat[1].sum(),
+            'num_subgroups': group_stat[0].shape[0],
+        }
+        wandb.log(wandb_log_dict)
+        wandb.finish()
+
+    pred_dict = {}
+    pred_dict['num_domain'] = 2
+    pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
+    pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
+    pred_dict['ars']   = ars_score
+    pred_dict['lowest_penalty'] = lowest_penalty
+
+    for mode in ['train', 'val']:
+        pred_dict['n_%s' % mode] = np.zeros(pred_dict['num_domain'] * num_class)
+        for a in range(pred_dict['num_domain']):
+            for y in range(num_class):
+                g = group_idx(a, y, pred_dict['num_domain'])
+                group = (np.array(pred_dict[mode]) == a) & (idx_class[idx_mode == mode] == y)
+                pred_dict['n_%s' % mode][g] = group.sum().item()
+        pred_dict['n_%s' % mode] = pred_dict['n_%s' % mode].tolist()
+
+    with open(file_name, 'w') as f:
+        json.dump(pred_dict, f)          
+    print('Estimated domains are saved in %s' % file_name)
+
+    return ars_score, lowest_penalty, pred_domain, idx_mode, idx_class, pred_dict
+
 def get_domain_eiil(
     loader,
     device,
@@ -679,63 +761,21 @@ def get_domain_eiil(
         with open(file_name, 'r') as f:
             pred_dict = json.load(f)
     else:
-        pred_domain, true_domain, idx_mode, idx_class = [], [], [], []
-        for mode in ['train', 'val']:
-            for batch_idx, features, labels, domains in tqdm(loader[mode], total = len(loader[mode]), desc='Train Set Domain Predicting'):
-                true_domain.append(domains.numpy())
-                idx_mode.extend([mode] * len(batch_idx))
-                idx_class.append(labels.numpy())
-                pred_domain_ = torch.randn(len(features), device = device).requires_grad_()
-                optim_group = torch.optim.Adam([pred_domain_], lr=lr_ei)
+        ars_score, lowest_penalty, pred_domain, idx_mode, idx_class, pred_dict = eiil_clustering(
+            dataset_name,
+            outlier,
+            False,
+            lr_ei,
+            loader,
+            device,
+            epoch_ei,
+            m, 
+            model,
+            num_domain,
+            num_class,
+            file_name,
+        )
 
-                features, labels = features.to(device), labels.to(device)
-                output = m(features)
-                if len(output) == 2: _, output = output
-                loss = F.cross_entropy(output, labels, reduction = 'none')
-
-                for _ in range(epoch_ei):
-                    error_a = (loss * pred_domain_.sigmoid()).mean()
-                    error_b = (loss * (1-pred_domain_.sigmoid())).mean()
-
-                    penalty_a = grad(error_a, get_parameters(m, model), create_graph=True)[0].pow(2).mean()
-                    penalty_b = grad(error_b, get_parameters(m, model), create_graph=True)[0].pow(2).mean()
-                    
-                    npenalty = - torch.stack([penalty_a, penalty_b]).mean()
-
-                    optim_group.zero_grad()
-                    npenalty.backward(retain_graph=True)
-                    optim_group.step()
-                
-                pred_domain_ = pred_domain_.detach()
-                pred_domain_[pred_domain_ > 0.5] = 1
-                pred_domain_[pred_domain_ <= 0.5] = 0
-                pred_domain.append(pred_domain_.cpu().detach().numpy())
-
-        true_domain = np.concatenate(true_domain)
-        idx_class = np.concatenate(idx_class)
-        true_group = group_idx(true_domain, idx_class, num_domain)
-        idx_mode = np.array(idx_mode)
-        pred_domain =  np.concatenate(pred_domain)
-
-        ars_score = ARS(true_group, pred_domain)
-        pred_dict = {}
-        pred_dict['num_domain'] = 2
-        pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
-        pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
-        pred_dict['ars']   = ars_score
-
-        for mode in ['train', 'val']:
-            pred_dict['n_%s' % mode] = np.zeros(pred_dict['num_domain'] * num_class)
-            for a in range(pred_dict['num_domain']):
-                for y in range(num_class):
-                    g = group_idx(a, y, pred_dict['num_domain'])
-                    group = (np.array(pred_dict[mode]) == a) & (idx_class[idx_mode == mode] == y)
-                    pred_dict['n_%s' % mode][g] = group.sum().item()
-            pred_dict['n_%s' % mode] = pred_dict['n_%s' % mode].tolist()
-
-        with open(file_name, 'w') as f:
-            json.dump(pred_dict, f)          
-        print('Estimated domains are saved in %s' % file_name)
     print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
 
     return {
@@ -755,6 +795,129 @@ def get_domain_eiil(
             'val': torch.tensor(pred_dict['n_val'], device = device),
         },
     }
+
+def george_clustering(
+    log_wandb,
+    dataset_name,
+    outlier,
+    overcluster_factor,
+    n_components,
+    max_k,
+    seed,
+    search_k,
+    idx_mode,
+    min_dist,
+    metric_types,
+    n_neighbors,
+    num_class,
+    cluster_method,
+    losses,
+    inputs,
+    true_domain,
+    idx_class,
+    true_group,
+    folder_name, 
+    file_name,
+):
+    if log_wandb:
+        try:
+            wandb.init(
+                project = 'privateDemographics',
+                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
+                config = {'overcluster_factor': overcluster_factor},
+                job_type = 'george',
+            )
+        except:
+            import wandb
+            wandb.init(
+                project = 'privateDemographics',
+                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
+                config = {'overcluster_factor': overcluster_factor},
+                job_type = 'george',
+            )
+
+    print('UMAP dimension reduction...')
+
+    inputs = torch.tensor(inputs)
+    true_domain = torch.tensor(true_domain)
+    idx_class = torch.tensor(idx_class)
+    true_group = torch.tensor(true_group)
+
+    inputs_trans = torch.zeros((inputs.shape[0], n_components))
+
+    try:
+        with open(os.path.join(folder_name, 'inputs_umap.npy'), 'rb') as f:
+            inputs_trans = np.load(f)
+
+    except:
+        for y in range(num_class):
+            y_idx = idx_class == y
+            reducer = umap.UMAP(random_state = seed, n_components = n_components, n_neighbors = n_neighbors, min_dist = min_dist)
+            # umap only process 2d array
+            inputs_2d = inputs[y_idx].reshape(inputs[y_idx].shape[0], np.prod(inputs[y_idx].shape[1:]))
+            inputs_trans[y_idx] = torch.tensor(reducer.fit_transform(inputs_2d))
+
+        with open(os.path.join(folder_name, 'inputs_umap.npy'), 'wb') as f:
+            np.save(f, inputs_trans)
+        
+    cluster_model = OverclusterModel(
+        cluster_method = cluster_method, 
+        max_k = max_k, 
+        seed = seed, 
+        sil_cuda = False,
+        search = search_k,
+        oc_fac = overcluster_factor,
+    )
+
+    c_trainer = GEORGECluster(metric_types, superclasses_to_ignore = [])
+    group_to_models = c_trainer.train(
+        cluster_model, 
+        inputs_trans,
+        idx_mode,
+        idx_class,
+        num_class,
+        losses,
+    )
+
+    pred_domain = c_trainer.evaluate(
+        group_to_models, 
+        inputs_trans,
+        idx_class,
+        num_class,
+    )
+
+    ars_score = ARS(true_group, pred_domain)
+    ss = silhouette_score(inputs_trans, pred_domain)
+
+    if log_wandb:
+        group_stat = np.unique(pred_domain, return_counts = True)
+        wandb_log_dict = {
+            'ars': ars_score,
+            'ss': ss, 
+            'max_proportion': group_stat[1].max()/group_stat[1].sum(),
+            'min_proportion': group_stat[1].min()/group_stat[1].sum(),
+            'num_subgroups': group_stat[0].shape[0],
+        }
+        wandb.log(wandb_log_dict)
+        wandb.finish()
+
+    pred_dict = {}
+    pred_dict['ars'] = ars_score
+    pred_dict['ss'] = ss
+    pred_dict['num_group'] = len(np.unique(pred_domain))
+    for mode in ['train', 'val']:
+        pred_dict[mode] = pred_domain[idx_mode == mode]
+        pred_dict['n_%s' % mode] = []
+        for g in range(pred_dict['num_group']):
+            group = pred_dict[mode] == g
+            pred_dict['n_%s' % mode].append(int(group.sum()))
+        pred_dict[mode] = pred_dict[mode].tolist()
+
+    with open(file_name, 'w') as f:
+        json.dump(pred_dict, f)          
+    print('Estimated domains are saved in %s' % file_name)
+
+    return ss, ars_score, pred_domain, pred_dict
     
 def get_domain_george(
     m,
@@ -793,70 +956,29 @@ def get_domain_george(
             num_domain,
         )
 
-        print('UMAP dimension reduction...')
-
-        inputs_trans = torch.zeros((inputs.shape[0], n_components))
-        inputs = torch.tensor(inputs)
-        true_domain = torch.tensor(true_domain)
-        idx_class = torch.tensor(idx_class)
-        true_group = torch.tensor(true_group)
-
-        try:
-            with open(os.path.join(folder_name, 'inputs_umap.npy'), 'rb') as f:
-                inputs_trans = np.load(f)
-
-        except:
-            for y in range(num_class):
-                y_idx = idx_class == y
-                reducer = umap.UMAP(random_state = seed, n_components = n_components, n_neighbors = n_neighbors, min_dist = min_dist)
-                # umap only process 2d array
-                inputs_2d = inputs[y_idx].reshape(inputs[y_idx].shape[0], np.prod(inputs[y_idx].shape[1:]))
-                inputs_trans[y_idx] = torch.tensor(reducer.fit_transform(inputs_2d))
-
-            with open(os.path.join(folder_name, 'inputs_umap.npy'), 'wb') as f:
-                np.save(f, inputs_trans)
-            
-        cluster_model = OverclusterModel(
-            cluster_method = cluster_method, 
-            max_k = max_k, 
-            seed = seed, 
-            sil_cuda = False,
-            search = search_k,
-            oc_fac = overcluster_factor,
-        )
-
-        c_trainer = GEORGECluster(metric_types, superclasses_to_ignore = [])
-        group_to_models = c_trainer.train(
-            cluster_model, 
-            inputs_trans,
+        ars_score, ss, pred_domain, pred_dict = george_clustering(
+            False,
+            dataset_name,
+            outlier,
+            overcluster_factor,
+            n_components,
+            max_k,
+            seed,
+            search_k,
             idx_mode,
-            idx_class,
+            min_dist,
+            metric_types,
+            n_neighbors,
             num_class,
+            cluster_method,
             losses,
-        )
-
-        pred_domain = c_trainer.evaluate(
-            group_to_models, 
-            inputs_trans,
+            inputs,
+            true_domain,
             idx_class,
-            num_class,
+            true_group,
+            folder_name, 
+            file_name,
         )
-
-        ars_score = ARS(true_group, pred_domain)
-        pred_dict = {}
-        pred_dict['ars'] = ars_score
-        pred_dict['num_group'] = len(np.unique(pred_domain))
-        for mode in ['train', 'val']:
-            pred_dict[mode] = pred_domain[idx_mode == mode]
-            pred_dict['n_%s' % mode] = []
-            for g in range(pred_dict['num_group']):
-                group = pred_dict[mode] == g
-                pred_dict['n_%s' % mode].append(int(group.sum()))
-            pred_dict[mode] = pred_dict[mode].tolist()
-
-        with open(file_name, 'w') as f:
-            json.dump(pred_dict, f)          
-        print('Estimated domains are saved in %s' % file_name)
                 
     print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
     return {
@@ -1456,24 +1578,185 @@ def pred_groups_grass(
         model,
     )
 
-    grad_clustering_parallel(
-        m,
-        loader, 
-        device,
-        optim,
+    grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
         model,
-        dataset_name,
-        num_domain, 
+        m,
+        loader,
+        device, 
+        optim,
+        num_domain,
         num_group,
         task,
         lr_scheduler,
+        dataset_name,
+        num_class,
+    )
+
+    grass_clustering(
+        grad,
+        dataset_name,
         eps,
         min_samples,
         y,
         log_wandb,
         outlier,
         process_grad,
+        idx_class,
+        true_domain,
+    )
+
+def pred_groups_eiil(
+    dataset_name, 
+    batch_size,
+    target_var,
+    domain,
+    num_workers,
+    pin_memory,
+    task,
+    outlier,
+    load_representations,
+    start_model_path,
+    seed,
+    log_wandb,
+    lr_ei,
+    epoch_ei,
+):
+
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s.json' % (outlier, overcluster_factor))
+    
+    [
+        m,
+        loader,
+        optim,
+        model,
+        num_domain,
+        num_group,
+        lr_scheduler,
+        device,
+        n,
+        num_feature,
         num_class,
+    ] = exp_init(
+        dataset_name,
+        batch_size,
+        target_var,
+        domain,
+        num_workers,
+        pin_memory,
+        task,
+        outlier,
+        load_representations,
+        start_model_path,
+        seed,
+        'eiil',
+        device,
+        1e-3,
+        1e-5,
+        model,
+    )
+
+    eiil_clustering(
+        dataset_name,
+        outlier,
+        log_wandb,
+        lr_ei,
+        loader,
+        device,
+        epoch_ei,
+        m, 
+        model,
+        num_domain,
+        num_class,
+        file_name,
+    )
+
+def pred_groups_george(
+    dataset_name,
+    batch_size,
+    target_var,
+    domain,
+    num_workers,
+    pin_memory,
+    task,
+    outlier,
+    load_representations,
+    start_model_path,
+    seed,
+    overcluster_factor,
+    min_dist,
+    search_k,
+    max_k,
+    n_components,
+    n_neighbors,
+    cluster_method,
+    metric_types,
+):
+
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s.json' % (outlier, overcluster_factor))
+
+    [
+        m,
+        loader,
+        optim,
+        model,
+        num_domain,
+        num_group,
+        lr_scheduler,
+        device,
+        n,
+        num_feature,
+        num_class,
+    ] = exp_init(
+        dataset_name,
+        batch_size,
+        target_var,
+        domain,
+        num_workers,
+        pin_memory,
+        task,
+        outlier,
+        load_representations,
+        start_model_path,
+        seed,
+        'george',
+        device,
+        1e-3,
+        1e-5,
+        model,
+    )
+
+    inputs, true_domain, idx_class, true_group, idx_mode, losses = collect_representations(
+        dataset_name,
+        loader,
+        device,
+        m,
+        num_domain,
+    )
+
+    george_clustering(
+        False,
+        dataset_name,
+        outlier,
+        overcluster_factor,
+        n_components,
+        max_k,
+        seed,
+        search_k,
+        idx_mode,
+        min_dist,
+        metric_types,
+        n_neighbors,
+        num_class,
+        cluster_method,
+        losses,
+        inputs,
+        true_domain,
+        idx_class,
+        true_group,
+        folder_name, 
+        file_name,
     )
 
 def run_exp(
@@ -1518,6 +1801,7 @@ def run_exp(
     model = None,
     collect_representation = 'grass',
     clustering_method = 'george',
+    use_val_group = False,
 ):
 
     (   
@@ -1565,6 +1849,7 @@ def run_exp(
             'batch_size': batch_size,
             'lr_q': lr_q,
             'lr': lr,
+            'use_val_group': use_val_group,
         },
         'robust_dro': {
             'num_epoch': num_epoch,
@@ -1584,6 +1869,7 @@ def run_exp(
             'lr': lr,
             'lr_ei': lr_ei,
             'epoch_ei': epoch_ei,
+            'use_val_group': use_val_group,
         },
         'george': {
             'num_epoch': num_epoch,
@@ -1593,6 +1879,7 @@ def run_exp(
             'max_k': max_k,
             'overcluster_factor': overcluster_factor,
             'george_cluster_method': george_cluster_method,
+            'use_val_group': use_val_group,
         },
         'grass_george_mix': {
             'num_epoch': num_epoch,
@@ -1696,7 +1983,7 @@ def run_exp(
             clustering_path,
             outlier,
             process_grad,
-            n,
+            use_val_group,
         )
 
         domain_loader['train_iter'] = iter(domain_loader['train'])
@@ -2167,6 +2454,7 @@ def parse_args():
     parser.add_argument('--model', default = 'default', type = str, choices = models)
     parser.add_argument('--collect_representation', default = 'grass', type = str, choices = ['grass', 'george'])
     parser.add_argument('--clustering_method', default = 'george', type = str, choices = ['grass', 'george'])
+    parser.add_argument('--use_val_group', default = 1, type = int, choices = [0,1])
 
     args = parser.parse_args()
 
@@ -2218,6 +2506,7 @@ def main():
     model = args.model if args.model != 'default' else None
     collect_representation = args.collect_representation
     clustering_method = args.clustering_method
+    use_val_group = args.use_val_group
 
     if pred_groups_only:
         pred_groups_grass(

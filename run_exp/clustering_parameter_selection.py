@@ -23,18 +23,21 @@ def main(args):
     method = args.algorithm
 
     if dataset == 'civilcomments':
+
+        start_model_path = '%s/privateDemographics/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'  % root_dir
+        num_class = 2
+
         if method == 'eiil':
             queue = 'x86_24h'
             mem = '64g'
+            cores = '4+1'
         else:
             queue = 'x86_1h'
-        start_model_path = '%s/privateDemographics/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'  % root_dir
-        num_class = 2
-        num_cores = 4
+            cores = '4+0'
 
         param_grid = {
             'grass': {
-                ' --clustering_y ': list(range(num_class)),
+                ' --clustering_y ': [0], # list(range(num_class)),
                 ' --batch_size ': 32,
                 ' --clustering_eps ': [0.35, 0.5, 0.7],
                 ' --clustering_min_samples ': [50, 100]
@@ -54,7 +57,7 @@ def main(args):
         queue = 'x86_1h'
         start_model_path = '../privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.001_best.model'
         num_class = 2
-        num_cores = 2
+        cores = '2+0'
 
         param_grid = {
             'grass': {
@@ -78,7 +81,7 @@ def main(args):
         queue = 'x86_1h'
         start_model_path = '../privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.001_best.model'
         num_class = 2
-        num_cores = 2
+        cores = '2+0'
 
         param_grid = {
             'grass': {
@@ -106,7 +109,7 @@ def main(args):
             start_model_path = '%s/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_1e-05_subsample_False_weight_decay_1_best.model' % root_dir
 
         num_class = 2
-        num_cores = 2
+        cores = '2+0'
 
 
         param_grid = {
@@ -131,7 +134,7 @@ def main(args):
         queue = 'x86_1h'
         start_model_path = '../privateDemographics/models/multinli/erm_num_epoch_10_batch_size_32_lr_2e-05_subsample_0_weight_decay_0.0001_best.model'
         num_class = 3
-        num_cores = 4
+        cores = '4+0'
         mem = '32g'
 
         param_grid = {
@@ -156,7 +159,7 @@ def main(args):
         queue = 'x86_1h'
         num_class = 2
         start_model_path = '%s/privateDemographics/models/compas/erm_num_epoch_300_batch_size_128_lr_2e-05_subsample_0_outlier_0_weight_decay_0.001_best.model' % root_dir
-        num_cores = 2
+        cores = '2+0'
         mem = '16g'
 
         param_grid = {
@@ -208,7 +211,7 @@ def main(args):
             queue, # args.start_job, 
             get_exp_name,
             'privateDemographics',
-            '%d+0' % num_cores,
+            cores,
             mem,
         )    
 

@@ -411,7 +411,10 @@ def grass_clustering(
     ars = ARS(true_domain_y, dbscan_labels)
     nmi = NMI(true_domain_y, dbscan_labels)
     iou, iou2, eq = iou_adaptive(true_domain_y, dbscan_labels)
-    ss = silhouette_score(grad_y, dbscan_labels)
+    try:
+        ss = silhouette_score(grad_y, dbscan_labels)
+    except:
+        ss = -1
 
     val = sum(iou) + sum(iou2) + iou[1] + iou2[0] + (iou[2] +iou2[2] ) /2
     val /= 9
@@ -589,7 +592,10 @@ def get_domain_grass(
                 print("y = %d: best avg IOU params" % y, best_dbscan_params)
 
         ars_score = ARS(true_group, pred_domain)
-        ss = silhouette_score(grad, pred_domain)
+        try:
+            ss = silhouette_score(grad, pred_domain)
+        except:
+            ss = -1
 
         pred_dict = {}
         pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
@@ -895,7 +901,10 @@ def george_clustering(
     )
 
     ars_score = ARS(true_group, pred_domain)
-    ss = float(silhouette_score(inputs_trans, pred_domain))
+    try:
+        ss = float(silhouette_score(inputs_trans, pred_domain))
+    except:
+        ss = -1
     print("ARS: %.4f" % ars_score)
     print('Silhouette Score: %.4f' % ss)
 

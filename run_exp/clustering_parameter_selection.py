@@ -83,7 +83,7 @@ def main(args):
 
     elif dataset == 'toy':
         queue = 'x86_1h'
-        start_model_path = '../privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.001_best.model'
+        start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_1.0_outlier_0_model_logreg_best.model' % root_dir
         num_class = 2
         cores = '2+0'
 

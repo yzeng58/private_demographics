@@ -127,7 +127,7 @@ def main(args):
         queue = 'x86_1h'
         num_class = 2
         start_model_path = '%s/privateDemographics/models/compas/erm_num_epoch_300_batch_size_128_lr_2e-05_subsample_0_outlier_0_weight_decay_0.001_best.model' % root_dir
-        num_cores = '2+1'
+        num_cores = 2
         mem = '16g'
 
         param_grid = {

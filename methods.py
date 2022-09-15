@@ -1953,7 +1953,11 @@ def run_exp(
                         '%s/privateDemographics/results/civilcomments/clustering_y_1_min_samples_100_eps_0.50.npy' % root_dir
                     ]
                 elif dataset_name == 'waterbirds':
-                    clustering_path = None
+                    if not use_val_group:
+                        clustering_path = [
+                            '%s/privateDemographics/results/waterbirds/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 40, 0.2),
+                            '%s/privateDemographics/results/waterbirds/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 100, 0.35),
+                        ]
                 elif dataset_name == 'synthetic':
                     clustering_path = [
                         '%s/privateDemographics/results/synthetic/clustering_y_0_min_samples_20_eps_0.40.npy' % root_dir,

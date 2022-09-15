@@ -13,6 +13,7 @@ def parse_args():
     parser.add_argument('--process_grad', default = 1, type = int, choices = [0,1])
     parser.add_argument('--run', default = 1, type = int, choices = [0,1])
     parser.add_argument('--model', default = 'default', type = str, choices = models)
+    parser.add_argument('--use_val_group', default = 1, type = int, choices = [0,1])
     args = parser.parse_args()
     return args
 
@@ -26,6 +27,7 @@ def main(args):
     outlier = args.outlier
     process_grad = args.process_grad
     model = args.model
+    use_val_group = args.use_val_group
 
     if dataset == 'synthetic':
         cores = '2+1'
@@ -89,11 +91,11 @@ def main(args):
             'eiil': {
                 ' --epoch ': 360,
                 ' --batch_size ': 128,
-                ' --lr_q ': [.01, .1],
-                ' --lr ': [1e-5, 1e-4],
-                ' --lr_ei ': [1e-4, 1e-3],
-                ' --epoch_ei ': 100,
-                ' --weight_decay ': [1e-3, 1e-2],
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --lr_ei ': 0.1, # selected 
+                ' --epoch_ei ': 50,
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
             'robust_dro': {
                 ' --epoch ': 360,
@@ -116,6 +118,7 @@ def main(args):
                 ' --lr_q ': [.001, .01, .1],
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --overcluster_factor ': 1 # selected
             },
             'grass_george_mix': {
                 ' --epoch ': 360,
@@ -281,7 +284,8 @@ def main(args):
         ' --start_model_path ' + start_model_path +\
         ' --outlier ' + str(outlier) +\
         ' --process_grad ' + str(process_grad) +\
-        ' --model ' + model
+        ' --model ' + model +\
+        ' --use_val_group ' + str(use_val_group)
 
     cmd_list = [cmd_pre]
     

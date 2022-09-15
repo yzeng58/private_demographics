@@ -31,8 +31,8 @@ def main(args):
             'grass': {
                 ' --clustering_y ': list(range(num_class)),
                 ' --batch_size ': 32,
-                ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
-                ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100]
+                ' --clustering_eps ': [0.35, 0.5, 0.7],
+                ' --clustering_min_samples ': [50, 100]
             },
             'eiil': {
                 ' --lr_ei ': [1e-1, 1e-2, 1e-3, 1e-4],

@@ -38,6 +38,7 @@ datasets = [
     'synthetic',
     'cmnist',
     'compas',
+    'toy',
 ]
 
 optimizers = [

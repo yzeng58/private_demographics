@@ -58,6 +58,35 @@ def main(args):
             },
         }
 
+    elif dataset == 'toy':
+        cores = '2+1'
+        start_model_path = "''"
+        queue = 'x86_1h'
+        task = 'fairness'
+
+        param_grid = {
+            'erm': {
+                ' --epoch ': 100,
+                ' --batch_size ': 128,
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+            'grass': {
+                ' --epoch ': 100,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+            'robust_dro': {
+                ' --epoch ': 100,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+        }
+
     elif dataset == 'waterbirds':
         queue = 'x86_24h'
         task = 'fairness'

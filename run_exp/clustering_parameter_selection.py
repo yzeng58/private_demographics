@@ -11,6 +11,7 @@ def parse_args():
     parser.add_argument("-d", "--dataset", default = 'civilcomments', type = str, choices = datasets)
     parser.add_argument('--outlier', default = 0, type = int, choices = [0,1])
     parser.add_argument('--run', default = 1, type = int, choices = [0,1])
+    parser.add_argument('--start_job', default = 0, type = int)
     args = parser.parse_args()
     return args
 
@@ -22,8 +23,11 @@ def main(args):
     method = args.algorithm
 
     if dataset == 'civilcomments':
-        queue = 'x86_1h'
-        start_model_path = '../nhf_backup/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'
+        if method == 'eiil':
+            queue = 'x86_24h'
+        else:
+            queue = 'x86_1h'
+        start_model_path = '%s/privateDemographics/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'  % root_dir
         num_class = 2
         num_cores = 4
 
@@ -46,6 +50,30 @@ def main(args):
         }
 
     elif dataset == 'synthetic':
+        queue = 'x86_1h'
+        start_model_path = '../privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.001_best.model'
+        num_class = 2
+        num_cores = 2
+
+        param_grid = {
+            'grass': {
+                ' --clustering_y ': list(range(num_class)),
+                ' --batch_size ': 128,
+                ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
+                ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100]
+            },
+            'eiil': {
+                ' --lr_ei ': [1e-1, 1e-2, 1e-3, 1e-4],
+                ' --batch_size ': 128,
+                ' --epoch_ei ': 50,
+            },
+            'george': {
+                ' --overcluster_factor ': [1, 2, 5, 10],
+                ' --batch_size ': 128,
+            }
+        }
+
+    elif dataset == 'toy':
         queue = 'x86_1h'
         start_model_path = '../privateDemographics/models/synthetic/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_0.001_best.model'
         num_class = 2
@@ -176,11 +204,11 @@ def main(args):
         submit_jobs(
             cmd_list, 
             '%s/privateDemographics/log_ccc' % root_dir, 
-            queue, 
+            queue, # args.start_job, 
             get_exp_name,
             'privateDemographics',
             '%d+0' % num_cores,
-            mem
+            mem,
         )    
 
 if __name__ == '__main__':

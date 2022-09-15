@@ -54,6 +54,10 @@ def exp_init(
         train_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/train.csv' % root_dir
         val_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv' % root_dir
         test_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv' % root_dir
+    elif dataset_name == 'toy':
+        train_path = '%s/privateDemographics/data/toy/%s.csv' % (root_dir, 'train')
+        val_path = '%s/privateDemographics/data/toy/%s.csv' % (root_dir, 'val')
+        test_path = '%s/privateDemographics/data/toy/%s.csv' % (root_dir, 'test')
     elif dataset_name in ['waterbirds', 'civilcomments', 'multinli', 'compas']:
         train_path = '%s/balanceGroups/data/%s' % (root_dir, dataset_name)
         val_path = None,
@@ -102,6 +106,9 @@ def exp_init(
     
     elif dataset_name in ['synthetic', 'compas']:
         if not model: model = 'mlp'
+
+    elif dataset_name in ['toy']:
+        if not model: model = 'logreg'
 
     m = load_model(
         model = model,
@@ -1963,6 +1970,14 @@ def run_exp(
                         '%s/privateDemographics/results/synthetic/clustering_y_0_min_samples_20_eps_0.40.npy' % root_dir,
                         '%s/privateDemographics/results/synthetic/clustering_y_1_min_samples_60_eps_0.45.npy' % root_dir
                     ]
+                elif dataset_name == 'toy':
+                    pass
+                elif dataset_name == 'compas':
+                    if not use_val_group:
+                        clustering_path = [
+                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 10, 0.1),
+                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 5, 0.1),
+                        ]
                 elif dataset_name == 'multinli':
                     # clustering_path = [
                     #     '%s/privateDemographics/results/multinli/clustering_y_0_min_samples_20_eps_0.40.npy' % root_dir,

@@ -29,8 +29,12 @@ def main(args):
 
         if method == 'eiil':
             queue = 'x86_24h'
-            mem = '64g'
+            mem = '128g'
             cores = '4+1'
+        elif method == 'grass':
+            queue = 'x86_1h'
+            mem = '64g'
+            cores = '4+0'
         else:
             queue = 'x86_1h'
             cores = '4+0'

@@ -94,7 +94,6 @@ def main(args):
                 ' --lr_ei ': [1e-4, 1e-3],
                 ' --epoch_ei ': 100,
                 ' --weight_decay ': [1e-3, 1e-2],
-                ' --load_pred_dict ': 0,
             },
             'robust_dro': {
                 ' --epoch ': 360,
@@ -182,7 +181,6 @@ def main(args):
                 ' --lr_ei ': [1e-4, 1e-3],
                 ' --epoch_ei ': 4,
                 ' --weight_decay ': [1e-3, 1e-2],
-                ' --load_pred_dict ': 0,
             },
         }
 
@@ -260,7 +258,6 @@ def main(args):
                 ' --lr_ei ': [1e-4, 1e-3],
                 ' --epoch_ei ': 100,
                 ' --weight_decay ': [1e-3, 1e-4],
-                ' --load_pred_dict ': 0,
             },
             'george': {
                 ' --epoch ': 300,
@@ -270,14 +267,15 @@ def main(args):
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2],
             },
         }
-    
+
+    log_wandb = 0 if args.run == 0 else 1
 
     cmd_pre = 'python' +\
         ' %s/privateDemographics/methods.py' % root_dir +\
         ' -a ' + method +\
         ' -d ' + dataset +\
         ' --device ' + device +\
-        ' --wandb ' + '1' +\
+        ' --wandb ' + str(log_wandb) +\
         ' --wandb_group_name ' + wandb_group_name +\
         ' --task ' + task +\
         ' --start_model_path ' + start_model_path +\

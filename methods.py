@@ -512,8 +512,8 @@ def get_domain_grass(
 
                 true_domain_y = true_domain[idx_class == y]
 
-                for eps in np.linspace(0.1, 0.7, 13):
-                    for min_samples in [5, 10, 20, 30, 40, 50, 60, 100]:
+                for eps in [.1]: # np.linspace(0.1, 0.7, 13):
+                    for min_samples in [5]: #[5, 10, 20, 30, 40, 50, 60, 100]:
 
                         ars, nmi, val, iou, iou2, eq, ss, dbscan_labels = grass_clustering(
                             grad,
@@ -549,6 +549,7 @@ def get_domain_grass(
 
                         else:
                             if ss > best_ss:
+                                best_ss = ss
                                 update_pred_domain = True
                                 
                         if update_pred_domain:
@@ -578,19 +579,16 @@ def get_domain_grass(
                 print("Number of group: %d" % num_group)
         
                 print(50 *'-')
-                print('DBSCAN: best ARS', max(arss), 'best NMI', max(nmis))
-                print('DBSCAN: best IOU', np.max(ious, axis=0))
-                print('DBSCAN: best IOU 2', np.max(ious2, axis=0))
-                
-                print("DBSCAN: best avg IOU", best_mean)
-                print("best avg IOU params", best_dbscan_params)
+                print("y = %d: best avg IOU params" % y, best_dbscan_params)
 
         ars_score = ARS(true_group, pred_domain)
+        ss = silhouette_score(grad, pred_domain)
 
         pred_dict = {}
         pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
         pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
         pred_dict['ars']   = ars_score
+        pred_dict['ss']    = float(ss)
         pred_dict['num_group'] = num_group
 
         for mode in ['train', 'val']:
@@ -604,6 +602,8 @@ def get_domain_grass(
         print('Estimated domains are saved in %s' % file_name)
                 
     print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
+    print('Silhouette Score of the Clustering Results: %.4f!' % pred_dict['ss'])
+
     return {
         'train': DataLoader(
             DomainLoader(pred_dict['train']),
@@ -656,11 +656,11 @@ def eiil_clustering(
     best_pred_domain = None
     lowest_penalty = np.inf 
     true_domain, idx_mode, idx_class = [], [], []
-    for i in range(epoch_ei):
+    for i in tqdm(range(epoch_ei), total = epoch_ei, desc = 'Predicting the group labels...'):
         final_npenalty = 0
         pred_domain = []
         for mode in ['train', 'val']:
-            for batch_idx, features, labels, domains in tqdm(loader[mode], total = len(loader[mode]), desc='Train Set Domain Predicting'):
+            for batch_idx, features, labels, domains in loader[mode]:
                 if i == 0:
                     true_domain.append(domains.numpy())
                     idx_mode.extend([mode] * len(batch_idx))
@@ -721,7 +721,7 @@ def eiil_clustering(
     pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
     pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
     pred_dict['ars']   = ars_score
-    pred_dict['lowest_penalty'] = lowest_penalty
+    pred_dict['lowest_penalty'] = lowest_penalty.item()
 
     for mode in ['train', 'val']:
         pred_dict['n_%s' % mode] = np.zeros(pred_dict['num_domain'] * num_class)
@@ -777,6 +777,7 @@ def get_domain_eiil(
         )
 
     print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
+    print('The Penalty Term of Group Prediction: %.4f!' % pred_dict['lowest_penalty'])
 
     return {
         'train': DataLoader(
@@ -887,7 +888,7 @@ def george_clustering(
     )
 
     ars_score = ARS(true_group, pred_domain)
-    ss = silhouette_score(inputs_trans, pred_domain)
+    ss = float(silhouette_score(inputs_trans, pred_domain))
 
     if log_wandb:
         group_stat = np.unique(pred_domain, return_counts = True)
@@ -981,6 +982,8 @@ def get_domain_george(
         )
                 
     print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
+    print('Silhouette Score of the Clustering Results: %.4f!' % pred_dict['ss'])
+
     return {
         'train': DataLoader(
             DomainLoader(pred_dict['train']),
@@ -1623,8 +1626,8 @@ def pred_groups_eiil(
 ):
 
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-    file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s.json' % (outlier, overcluster_factor))
-    
+    file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d.json' % (outlier, lr_ei, epoch_ei))
+
     [
         m,
         loader,
@@ -2572,6 +2575,7 @@ def main():
             model,
             collect_representation,
             clustering_method,
+            use_val_group,
         )
 
 if __name__ == '__main__':

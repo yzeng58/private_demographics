@@ -373,7 +373,7 @@ def grass_clustering(
                 project = 'privateDemographics',
                 group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
                 config = {'eps': eps, 'min_samples': min_samples},
-                job_type = 'y=%d' % y
+                job_type = 'grass:y=%d' % y
             )
         except:
             import wandb
@@ -381,7 +381,7 @@ def grass_clustering(
                 project = 'privateDemographics',
                 group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
                 config = {'eps': eps, 'min_samples': min_samples},
-                job_type = 'y=%d' % y
+                job_type = 'grass:y=%d' % y
             )
 
     grad_y = grad[idx_class == y]
@@ -512,8 +512,8 @@ def get_domain_grass(
 
                 true_domain_y = true_domain[idx_class == y]
 
-                for eps in [.1]: # np.linspace(0.1, 0.7, 13):
-                    for min_samples in [5]: #[5, 10, 20, 30, 40, 50, 60, 100]:
+                for eps in np.linspace(0.1, 0.7, 13):
+                    for min_samples in [5, 10, 20, 30, 40, 50, 60, 100]:
 
                         ars, nmi, val, iou, iou2, eq, ss, dbscan_labels = grass_clustering(
                             grad,
@@ -889,6 +889,8 @@ def george_clustering(
 
     ars_score = ARS(true_group, pred_domain)
     ss = float(silhouette_score(inputs_trans, pred_domain))
+    print("ARS: %.4f" % ars_score)
+    print('Silhouette Score: %.4f' % ss)
 
     if log_wandb:
         group_stat = np.unique(pred_domain, return_counts = True)
@@ -1623,6 +1625,8 @@ def pred_groups_eiil(
     log_wandb,
     lr_ei,
     epoch_ei,
+    device,
+    model,
 ):
 
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
@@ -1694,6 +1698,9 @@ def pred_groups_george(
     n_neighbors,
     cluster_method,
     metric_types,
+    device,
+    model,
+    log_wandb,
 ):
 
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
@@ -1739,7 +1746,7 @@ def pred_groups_george(
     )
 
     george_clustering(
-        False,
+        log_wandb,
         dataset_name,
         outlier,
         overcluster_factor,
@@ -2554,6 +2561,9 @@ def main():
                 n_neighbors,
                 george_cluster_method,
                 metric_types,
+                device,
+                model,
+                log_wandb,
             )
         elif method == 'eiil':
             pred_groups_eiil(
@@ -2571,6 +2581,8 @@ def main():
                 log_wandb,
                 lr_ei,
                 epoch_ei,
+                device,
+                model,
             )
     else:
         run_exp(

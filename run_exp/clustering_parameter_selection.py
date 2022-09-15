@@ -40,7 +40,7 @@ def main(args):
                 ' --epoch_ei ': 3,
             },
             'george': {
-                ' --overcluster_factor': [1, 2, 5, 10],
+                ' --overcluster_factor ': [1, 2, 5, 10],
                 ' --batch_size ': 32,
             }
         }
@@ -64,7 +64,7 @@ def main(args):
                 ' --epoch_ei ': 50,
             },
             'george': {
-                ' --overcluster_factor': [1, 2, 5, 10],
+                ' --overcluster_factor ': [1, 2, 5, 10],
                 ' --batch_size ': 128,
             }
         }
@@ -93,7 +93,7 @@ def main(args):
                 ' --epoch_ei ': 50,
             },
             'george': {
-                ' --overcluster_factor': [1, 2, 5, 10],
+                ' --overcluster_factor ': [1, 2, 5, 10],
                 ' --batch_size ': 128,
             }
         }
@@ -118,7 +118,7 @@ def main(args):
                 ' --epoch_ei ': 3,
             },
             'george': {
-                ' --overcluster_factor': [1, 2, 5, 10],
+                ' --overcluster_factor ': [1, 2, 5, 10],
                 ' --batch_size ': 32,
             }
         }
@@ -143,7 +143,7 @@ def main(args):
                 ' --epoch_ei ': 50,
             },
             'george': {
-                ' --overcluster_factor': [1, 2, 5, 10],
+                ' --overcluster_factor ': [1, 2, 5, 10],
                 ' --batch_size ': 128,
             }
         }
@@ -151,6 +151,7 @@ def main(args):
     cmd_pre = 'python' +\
         ' %s/privateDemographics/methods.py' % root_dir +\
         ' -g ' + '1' +\
+        ' -a ' + method +\
         ' -d ' + dataset +\
         ' --device ' + device +\
         ' --start_model_path ' + start_model_path +\
@@ -167,7 +168,7 @@ def main(args):
         else:
             cmd_list = list(map(lambda x: x+param+str(param_grid[method][param]), cmd_list))
     
-    get_exp_name = lambda job_cmd: job_cmd.split(' ')[5] + '_' + job_cmd.split(' ')[13]
+    get_exp_name = lambda job_cmd: job_cmd.split(' ')[7] + '_' + job_cmd.split(' ')[15]
 
     if args.run == 0:
         print(cmd_list[0])

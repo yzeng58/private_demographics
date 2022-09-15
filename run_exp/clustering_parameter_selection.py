@@ -25,6 +25,7 @@ def main(args):
     if dataset == 'civilcomments':
         if method == 'eiil':
             queue = 'x86_24h'
+            mem = '64g'
         else:
             queue = 'x86_1h'
         start_model_path = '%s/privateDemographics/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'  % root_dir

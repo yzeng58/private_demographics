@@ -10,6 +10,12 @@ algs = [
     'grass_george_mix',
 ]
 
+clustering_algs = [
+    'grass',
+    'eiil',
+    'george',
+]
+
 tasks = [
     'fairness',
     'irm',

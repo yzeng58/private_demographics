@@ -371,7 +371,7 @@ def grass_clustering(
         try:
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
+                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
                 config = {'eps': eps, 'min_samples': min_samples},
                 job_type = 'y=%d' % y
             )
@@ -379,7 +379,7 @@ def grass_clustering(
             import wandb
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
+                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
                 config = {'eps': eps, 'min_samples': min_samples},
                 job_type = 'y=%d' % y
             )
@@ -640,7 +640,7 @@ def eiil_clustering(
         try:
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
+                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
                 config = {'lr_ei': lr_ei},
                 job_type = 'eiil'
             )
@@ -648,7 +648,7 @@ def eiil_clustering(
             import wandb
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
+                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
                 config = {'lr_ei': lr_ei},
                 job_type = 'eiil'
             )
@@ -824,7 +824,7 @@ def george_clustering(
         try:
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
+                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
                 config = {'overcluster_factor': overcluster_factor},
                 job_type = 'george',
             )
@@ -832,7 +832,7 @@ def george_clustering(
             import wandb
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_outlier_%d_group_prediction' % (dataset_name, outlier),
+                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
                 config = {'overcluster_factor': overcluster_factor},
                 job_type = 'george',
             )
@@ -2512,26 +2512,66 @@ def main():
     use_val_group = args.use_val_group
 
     if pred_groups_only:
-        pred_groups_grass(
-            dataset_name,
-            batch_size,
-            seed,
-            device,
-            y,
-            min_samples,
-            eps,
-            target_var,
-            domain,
-            num_workers,
-            pin_memory,
-            task,
-            start_model_path,
-            load_representations,
-            log_wandb,
-            outlier,
-            process_grad,
-            model,
-        )
+        if method == 'grass':
+            pred_groups_grass(
+                dataset_name,
+                batch_size,
+                seed,
+                device,
+                y,
+                min_samples,
+                eps,
+                target_var,
+                domain,
+                num_workers,
+                pin_memory,
+                task,
+                start_model_path,
+                load_representations,
+                log_wandb,
+                outlier,
+                process_grad,
+                model,
+            )
+        elif method == 'george':
+            pred_groups_george(
+                dataset_name,
+                batch_size,
+                target_var,
+                domain,
+                num_workers,
+                pin_memory,
+                task,
+                outlier,
+                load_representations,
+                start_model_path,
+                seed,
+                overcluster_factor,
+                min_dist,
+                search_k,
+                max_k,
+                n_components,
+                n_neighbors,
+                george_cluster_method,
+                metric_types,
+            )
+        elif method == 'eiil':
+            pred_groups_eiil(
+                dataset_name, 
+                batch_size,
+                target_var,
+                domain,
+                num_workers,
+                pin_memory,
+                task,
+                outlier,
+                load_representations,
+                start_model_path,
+                seed,
+                log_wandb,
+                lr_ei,
+                epoch_ei,
+            )
     else:
         run_exp(
             method, 

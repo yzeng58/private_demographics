@@ -373,6 +373,7 @@ def grass_clustering(
     process_grad,
     idx_class,
     true_domain,
+    clustering_path_use,
 ):      
     if log_wandb:
         try:
@@ -391,7 +392,13 @@ def grass_clustering(
                 job_type = 'grass:y=%d' % y
             )
 
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
+        y, min_samples, eps,
+    ))
+
     grad_y = grad[idx_class == y]
+    print("idx_class counts:", np.unique(idx_class, return_counts=True))
     if process_grad:
         center = grad_y.mean(axis=0)
         grad_y = grad_y - center
@@ -399,14 +406,17 @@ def grass_clustering(
 
     true_domain_y = true_domain[idx_class == y]
 
-    # dist = cosine_dist(grad_y, grad_y)
-    # dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed')
-    # dbscan.fit(dist)
+    if clustering_path_use:
+        dbscan_labels = np.load(file_name)
+    else:
+        # dist = cosine_dist(grad_y, grad_y)
+        # dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed')
+        # dbscan.fit(dist)
+        print('Running DBSCAN...')
+        dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine')
+        dbscan.fit(grad_y)
 
-    dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine')
-    dbscan.fit(grad_y)
-
-    dbscan_labels = dbscan.labels_
+        dbscan_labels = dbscan.labels_
 
     ars = ARS(true_domain_y, dbscan_labels)
     nmi = NMI(true_domain_y, dbscan_labels)
@@ -416,15 +426,15 @@ def grass_clustering(
     except:
         ss = -1
 
-    val = sum(iou) + sum(iou2) + iou[1] + iou2[0] + (iou[2] +iou2[2] ) /2
+    val = sum(iou) + sum(iou2) + iou[1] + iou2[0] + (iou[2] +iou2[2])/2
     val /= 9
     if eq: print("Weighted avg", val)
     pred_domain_y = dbscan_labels
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-    file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
-        y, min_samples, eps,
-    ))
+
+    if os.path.isfile(file_name):
+        os.remove(file_name)
     with open(file_name, 'wb') as f:
+        print("Length of pred_domain_y: %d" % len(pred_domain_y))
         np.save(f, pred_domain_y)
 
     if log_wandb:
@@ -536,6 +546,7 @@ def get_domain_grass(
                             process_grad,
                             idx_class,
                             true_domain,
+                            False,
                         )
 
                         print('Eps', eps, 'Min samples', min_samples)
@@ -698,7 +709,7 @@ def eiil_clustering(
                 npenalty.backward(retain_graph=True)
                 optim_group.step()
 
-                final_npenalty += npenalty
+                final_npenalty += npenalty.item()
                
                 pred_domain_ = pred_domain_.detach()
                 pred_domain_[pred_domain_ > 0.5] = 1
@@ -1567,6 +1578,7 @@ def pred_groups_grass(
     outlier = False,
     process_grad = True,
     model = None,
+    clustering_path_use = False,
 ):
     [
         m,
@@ -1624,6 +1636,7 @@ def pred_groups_grass(
         process_grad,
         idx_class,
         true_domain,
+        clustering_path_use,
     )
 
 def pred_groups_eiil(
@@ -1974,6 +1987,11 @@ def run_exp(
                             '%s/privateDemographics/results/waterbirds/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 40, 0.2),
                             '%s/privateDemographics/results/waterbirds/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 100, 0.35),
                         ]
+                    else:
+                        clustering_path = [
+                            '%s/privateDemographics/results/waterbirds/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 20, 0.5),
+                            '%s/privateDemographics/results/waterbirds/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 5, 0.25),
+                        ]
                 elif dataset_name == 'synthetic':
                     clustering_path = [
                         '%s/privateDemographics/results/synthetic/clustering_y_0_min_samples_20_eps_0.40.npy' % root_dir,
@@ -1985,7 +2003,12 @@ def run_exp(
                     if not use_val_group:
                         clustering_path = [
                             '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 10, 0.1),
-                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 5, 0.1),
+                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 10, 0.1),
+                        ]
+                    else:
+                        clustering_path = [
+                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 10, 0.3),
+                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 60, 0.4),
                         ]
                 elif dataset_name == 'multinli':
                     # clustering_path = [
@@ -2567,6 +2590,7 @@ def main():
                 outlier,
                 process_grad,
                 model,
+                clustering_path_use,
             )
         elif method == 'george':
             pred_groups_george(

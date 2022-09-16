@@ -15,11 +15,11 @@ from utils import group_idx
 def toyData(train_val_test = (0.6,0.2,0.2), seed = 123, var = 0.1):
     X, Y, dfs, centers = {}, {}, {}, defaultdict(dict)
     
-    centers[0][0] = [(-1,5), (-1,3), (-1,2), (-1,1)]
+    centers[0][0] = [(0,5), (0,3), (0,2), (0,1)]
     centers[0][1] = [(1,5), (1,3), (1,2), (1,1)]
 
     centers[1][0] = [(1,4)]
-    centers[1][1] = [(-1,4)]
+    centers[1][1] = [(0,4)]
     
     for a in centers:
         X[a], Y[a] = [], []

@@ -12,6 +12,7 @@ def parse_args():
     parser.add_argument('--outlier', default = 0, type = int, choices = [0,1])
     parser.add_argument('--run', default = 1, type = int, choices = [0,1])
     parser.add_argument('--start_job', default = 0, type = int)
+    parser.add_argument("--clustering_path_use", default = 0, type = int, choices = [0,1])
     args = parser.parse_args()
     return args
 
@@ -21,6 +22,7 @@ def main(args):
     mem = '16g'
     outlier = args.outlier
     method = args.algorithm
+    clustering_path_use = args.clustering_path_use
 
     if dataset == 'civilcomments':
 
@@ -29,8 +31,9 @@ def main(args):
 
         if method == 'eiil':
             queue = 'x86_24h'
-            mem = '128g'
+            mem = '64g'
             cores = '4+1'
+            device = 'cuda'
         elif method == 'grass':
             queue = 'x86_1h'
             mem = '64g'
@@ -41,7 +44,7 @@ def main(args):
 
         param_grid = {
             'grass': {
-                ' --clustering_y ': [0], # list(range(num_class)),
+                ' --clustering_y ': list(range(num_class)),
                 ' --batch_size ': 32,
                 ' --clustering_eps ': [0.35, 0.5, 0.7],
                 ' --clustering_min_samples ': [50, 100]
@@ -184,6 +187,8 @@ def main(args):
             }
         }
 
+    log_wandb = 0 if args.run == 0 else 1
+
     cmd_pre = 'python' +\
         ' %s/privateDemographics/methods.py' % root_dir +\
         ' -g ' + '1' +\
@@ -191,7 +196,9 @@ def main(args):
         ' -d ' + dataset +\
         ' --device ' + device +\
         ' --start_model_path ' + start_model_path +\
-        ' --outlier ' + str(outlier)
+        ' --outlier ' + str(outlier) +\
+        ' --wandb ' + str(log_wandb) +\
+        ' --clustering_path_use ' + str(clustering_path_use) 
 
     cmd_list = [cmd_pre]
     
@@ -204,7 +211,7 @@ def main(args):
         else:
             cmd_list = list(map(lambda x: x+param+str(param_grid[method][param]), cmd_list))
     
-    get_exp_name = lambda job_cmd: job_cmd.split(' ')[7] + '_' + job_cmd.split(' ')[15]
+    get_exp_name = lambda job_cmd: 'cluster_' + job_cmd.split(' ')[7] + '_' + job_cmd.split(' ')[3]
 
     if args.run == 0:
         print(cmd_list[0])

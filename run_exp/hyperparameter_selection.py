@@ -60,7 +60,7 @@ def main(args):
 
     elif dataset == 'toy':
         cores = '2+1'
-        start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_1.0_outlier_0_model_logreg_best.model' % root_dir
+        start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.0001_outlier_0_model_logreg_best.model' % root_dir
         queue = 'x86_1h'
         task = 'fairness'
 
@@ -206,13 +206,13 @@ def main(args):
                 ' --weight_decay ': [1e-1, 1e-2],
             },
             'eiil': {
-                ' --epoch ': 6,
+                ' --epoch ': 10,
                 ' --batch_size ': 32,
-                ' --lr_q ': [.01, .1],
-                ' --lr ': [1e-5, 1e-4],
-                ' --lr_ei ': [1e-4, 1e-3],
-                ' --epoch_ei ': 4,
-                ' --weight_decay ': [1e-3, 1e-2],
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --lr_ei ': 1e-4, # selected
+                ' --epoch_ei ': 3, # selected
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
         }
 

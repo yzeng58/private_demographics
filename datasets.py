@@ -13,6 +13,7 @@ from clean_up.datasets import get_loaders
 from utils import group_idx
 
 def toyData(train_val_test = (0.6,0.2,0.2), seed = 123, var = 0.1):
+    np.random.seed(seed)
     X, Y, dfs, centers = {}, {}, {}, defaultdict(dict)
     
     centers[0][0] = [(0,5), (0,3), (0,2), (0,1)]

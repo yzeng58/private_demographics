@@ -1998,16 +1998,25 @@ def run_exp(
                         '%s/privateDemographics/results/synthetic/clustering_y_1_min_samples_60_eps_0.45.npy' % root_dir
                     ]
                 elif dataset_name == 'toy':
-                    pass
+                    if not use_val_group:
+                        clustering_path = [
+                            '%s/privateDemographics/results/toy/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 40, 0.2),
+                            '%s/privateDemographics/results/toy/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 100, 0.4),
+                        ]
+                    else:
+                        clustering_path = [
+                            '%s/privateDemographics/results/toy/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 100, 0.45),
+                            '%s/privateDemographics/results/toy/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 100, 0.1),
+                        ]
                 elif dataset_name == 'compas':
                     if not use_val_group:
                         clustering_path = [
                             '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 10, 0.1),
-                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 10, 0.1),
+                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 5, 0.1),
                         ]
                     else:
                         clustering_path = [
-                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 10, 0.3),
+                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 60, 0.1),
                             '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 60, 0.4),
                         ]
                 elif dataset_name == 'multinli':

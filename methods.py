@@ -17,7 +17,6 @@ from sklearn.preprocessing import normalize
 from sklearn.metrics import davies_bouldin_score, calinski_harabasz_score, silhouette_score
 from sklearn.metrics import normalized_mutual_info_score as NMI
 from sklearn.metrics.cluster import adjusted_rand_score as ARS
-from sklearn.metrics.pairwise import cosine_distances
 from torch.autograd import grad
 
 ################## MODEL SETTING ########################
@@ -374,6 +373,7 @@ def grass_clustering(
     idx_class,
     true_domain,
     clustering_path_use,
+    grass_distance_type,
 ):      
     if log_wandb:
         try:
@@ -409,11 +409,8 @@ def grass_clustering(
     if clustering_path_use:
         dbscan_labels = np.load(file_name)
     else:
-        # dist = cosine_dist(grad_y, grad_y)
-        # dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed')
-        # dbscan.fit(dist)
         print('Running DBSCAN...')
-        dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine')
+        dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric=grass_distance_type)
         dbscan.fit(grad_y)
 
         dbscan_labels = dbscan.labels_
@@ -472,6 +469,7 @@ def get_domain_grass(
     outlier,
     process_grad,
     use_val_group,
+    grass_distance_type,
 ):
     m = deepcopy(m)
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
@@ -523,7 +521,6 @@ def get_domain_grass(
                     center = grad_y.mean(axis=0)
                     grad_y = grad_y - center
                     grad_y = normalize(grad_y)
-                dist = cosine_dist(grad_y, grad_y)
 
                 clusterings, arss, nmis, ious, ious2, sss = [], [], [], [], [], []
                 best_dbscan_params = {}
@@ -547,6 +544,7 @@ def get_domain_grass(
                             idx_class,
                             true_domain,
                             False,
+                            grass_distance_type,
                         )
 
                         print('Eps', eps, 'Min samples', min_samples)
@@ -1060,6 +1058,7 @@ def get_domain_grass_george_mix(
     process_data = True,
     seed = 123,
     batch_size = 128,
+    grass_distance_type = 'cosine',
 ):  
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d.json' % (
@@ -1115,7 +1114,7 @@ def get_domain_grass_george_mix(
                     data_y = data_y - center
                     data_y = normalize(data_y)
 
-                dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine')
+                dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric=grass_distance_type)
                 dbscan.fit(data_y)
                 idx = idx_class == y
                 idx[idx] = dbscan.labels_ >= 0
@@ -1579,6 +1578,7 @@ def pred_groups_grass(
     process_grad = True,
     model = None,
     clustering_path_use = False,
+    grass_distance_type = 'cosine',
 ):
     [
         m,
@@ -1637,6 +1637,7 @@ def pred_groups_grass(
         idx_class,
         true_domain,
         clustering_path_use,
+        grass_distance_type,
     )
 
 def pred_groups_eiil(
@@ -1841,6 +1842,7 @@ def run_exp(
     collect_representation = 'grass',
     clustering_method = 'george',
     use_val_group = False,
+    grass_distance_type = 'cosine',
 ):
 
     (   
@@ -2054,6 +2056,7 @@ def run_exp(
             outlier,
             process_grad,
             use_val_group,
+            grass_distance_type,
         )
 
         domain_loader['train_iter'] = iter(domain_loader['train'])
@@ -2131,6 +2134,7 @@ def run_exp(
             process_grad,
             seed,
             batch_size,
+            grass_distance_type,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
@@ -2525,6 +2529,7 @@ def parse_args():
     parser.add_argument('--collect_representation', default = 'grass', type = str, choices = ['grass', 'george'])
     parser.add_argument('--clustering_method', default = 'george', type = str, choices = ['grass', 'george'])
     parser.add_argument('--use_val_group', default = 1, type = int, choices = [0,1])
+    parser.add_argument('--grass_distance_type', default = 'cosine', type = str, choices = ['cosine', 'euclidean'])
 
     args = parser.parse_args()
 
@@ -2577,6 +2582,7 @@ def main():
     collect_representation = args.collect_representation
     clustering_method = args.clustering_method
     use_val_group = args.use_val_group
+    grass_distance_type = args.grass_distance_type
 
     if pred_groups_only:
         if method == 'grass':
@@ -2600,6 +2606,7 @@ def main():
                 process_grad,
                 model,
                 clustering_path_use,
+                grass_distance_type,
             )
         elif method == 'george':
             pred_groups_george(
@@ -2689,6 +2696,7 @@ def main():
             collect_representation,
             clustering_method,
             use_val_group,
+            grass_distance_type,
         )
 
 if __name__ == '__main__':

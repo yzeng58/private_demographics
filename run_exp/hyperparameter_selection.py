@@ -85,6 +85,31 @@ def main(args):
                 ' --lr ': [1e-4, 1e-3, 1e-2],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2,],
             },
+            'eiil': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --lr_ei ': 0.1, # selected
+                ' --epoch_ei ': 50,
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+            'cvar_doro': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --outlier_frac ': [0.005, 0.01, 0.02, 0.1, 0.2],
+                ' --minimal_group_frac ': [0.1, 0.2, 0.5],
+                ' --lr ': [1e-5, 1e-4],
+                ' --weight_decay ': [1e-1, 1],
+            },
+            'george': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --overcluster_factor ': 10 # selected
+            },
         }
 
     elif dataset == 'waterbirds':

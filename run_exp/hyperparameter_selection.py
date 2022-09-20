@@ -117,7 +117,14 @@ def main(args):
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
                 ' --overcluster_factor ': 1 # selected
-            }
+            },
+            'input_dbscan': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
         }
 
     elif dataset == 'waterbirds':

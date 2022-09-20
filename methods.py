@@ -441,6 +441,7 @@ def grass_clustering(
         os.remove(file_name)
     with open(file_name, 'wb') as f:
         print("Length of pred_domain_y: %d" % len(pred_domain_y))
+        print('Predicted groups are saved in %s!' % file_name)
         np.save(f, pred_domain_y)
 
     if log_wandb:
@@ -738,18 +739,6 @@ def eiil_clustering(
 
     ars_score = ARS(true_group, pred_domain)
 
-    if log_wandb:
-        group_stat = np.unique(pred_domain, return_counts = True)
-        wandb_log_dict = {
-            'ars': ars_score,
-            'lowest_penalty': lowest_penalty, 
-            'max_proportion': group_stat[1].max()/group_stat[1].sum(),
-            'min_proportion': group_stat[1].min()/group_stat[1].sum(),
-            'num_subgroups': group_stat[0].shape[0],
-        }
-        wandb.log(wandb_log_dict)
-        wandb.finish()
-
     pred_dict = {}
     pred_dict['num_domain'] = 2
     pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
@@ -769,6 +758,18 @@ def eiil_clustering(
     with open(file_name, 'w') as f:
         json.dump(pred_dict, f)          
     print('Estimated domains are saved in %s' % file_name)
+
+    if log_wandb:
+        group_stat = np.unique(pred_domain, return_counts = True)
+        wandb_log_dict = {
+            'ars': ars_score,
+            'lowest_penalty': lowest_penalty, 
+            'max_proportion': group_stat[1].max()/group_stat[1].sum(),
+            'min_proportion': group_stat[1].min()/group_stat[1].sum(),
+            'num_subgroups': group_stat[0].shape[0],
+        }
+        wandb.log(wandb_log_dict)
+        wandb.finish()
 
     return ars_score, lowest_penalty, pred_domain, idx_mode, idx_class, pred_dict
 
@@ -2185,10 +2186,19 @@ def run_exp(
                         'min_samples': min_samples,
                     })
     elif method == 'grass_george_mix' and clustering_method == 'grass':
-        if dataset_name == 'toy':
-            clustering_path = [
-                
-            ]
+        if clustering_path_use:
+            if best_clustering_parameter: 
+                if dataset_name == 'toy':
+                    if use_val_group:
+                        clustering_path = [
+                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.30.npy' % (root_dir, dataset_name),
+                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_100_eps_0.35.npy' % (root_dir, dataset_name),
+                        ]
+                    else:
+                        clustering_path = [
+                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.45.npy' % (root_dir, dataset_name),
+                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_100_eps_0.10.npy' % (root_dir, dataset_name),
+                        ]
 
         domain_loader = get_domain_grass(
             m, 

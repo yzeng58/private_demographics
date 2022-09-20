@@ -189,17 +189,21 @@ def main(args):
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
                 ' --overcluster_factor ': 1 # selected
             },
-            'grass_george_mix': {
+            'grad_george': {
                 ' --epoch ': 360,
                 ' --batch_size ': 128,
                 ' --lr_q ': [.001, .01, .1],
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
-                '': [
-                    ' --collect_representation grass --clustering_method george',
-                    ' --collect_representation george --clustering_method grass'
-                ]
-            }
+                ' --overcluster_factor ': 10 # selected
+            },
+            'input_dbscan': {
+                ' --epoch ': 360,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
         }
 
     elif dataset == 'civilcomments':
@@ -337,6 +341,21 @@ def main(args):
                 ' --lr_q ': [.001, .01, .1],
                 ' --lr ': [2e-5, 2e-4, 2e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2],
+            },
+            'grad_george': {
+                ' --epoch ': 300,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --overcluster_factor ': 1 # selected
+            },
+            'input_dbscan': {
+                ' --epoch ': 300,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
         }
 

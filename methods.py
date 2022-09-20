@@ -2075,15 +2075,23 @@ def run_exp(
             'batch_size': batch_size,
             'lr_q': lr_q,
             'lr': lr,
-            'collect_representation': collect_representation,
-            'clustering_method': clustering_method,
-            'max_k': max_k,
-            'overcluster_factor': overcluster_factor,
-            'george_cluster_method': george_cluster_method,
-            'eps': eps,
-            'min_samples': min_samples,
+            'type': '%s_%s' % (collect_representation, clustering_method),
+            'use_val_group': use_val_group,
         }
     }
+
+    if method == 'grass_george_mix':
+        if clustering_method ==' grass':
+            params[method].update({
+                'eps': eps,
+                'min_samples': min_samples,
+            })
+        else:
+            params[method].update({
+                'max_k': max_k,
+                'overcluster_factor': overcluster_factor,
+                'george_cluster_method': george_cluster_method,
+            })
 
     params[method].update({
         'weight_decay': weight_decay,
@@ -2198,6 +2206,28 @@ def run_exp(
                         clustering_path = [
                             '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.45.npy' % (root_dir, dataset_name),
                             '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_100_eps_0.10.npy' % (root_dir, dataset_name),
+                        ]
+                elif dataset_name == 'waterbirds':
+                    if use_val_group:
+                        clustering_path = [
+                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_30_eps_0.55.npy' % (root_dir, dataset_name),
+                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_20_eps_0.60.npy' % (root_dir, dataset_name),
+                        ]
+                    else:
+                        clustering_path = [
+                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.60.npy' % (root_dir, dataset_name),
+                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_40_eps_0.65.npy' % (root_dir, dataset_name),
+                        ]
+                elif dataset_name == 'compas':
+                    if use_val_group:
+                        clustering_path = [
+                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.10.npy' % (root_dir, dataset_name),
+                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_5_eps_0.10.npy' % (root_dir, dataset_name),
+                        ]
+                    else:
+                        clustering_path = [
+                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.10.npy' % (root_dir, dataset_name),
+                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_50_eps_0.25.npy' % (root_dir, dataset_name),  
                         ]
 
         domain_loader = get_domain_grass(
@@ -2753,6 +2783,9 @@ def main():
             collect_representation = 'george'
             clustering_method = 'grass'
         method = 'grass_george_mix'
+    else:
+        collect_representation = None
+        clustering_method = None
 
     if pred_groups_only:
         if method == 'grass':

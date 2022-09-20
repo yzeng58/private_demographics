@@ -144,7 +144,17 @@ def main(args):
             'george': {
                 ' --overcluster_factor ': [1, 2, 5, 10],
                 ' --batch_size ': 128,
-            }
+            },
+            'input_dbscan': {
+                ' --clustering_y ': list(range(num_class)),
+                ' --batch_size ': 128,
+                ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
+                ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100]
+            },
+            'grad_george': {
+                ' --overcluster_factor ': [1, 2, 5, 10],
+                ' --batch_size ': 128,
+            },
         }
 
     elif dataset == 'multinli':
@@ -194,7 +204,17 @@ def main(args):
             'george': {
                 ' --overcluster_factor ': [1, 2, 5, 10],
                 ' --batch_size ': 128,
-            }
+            },
+            'input_dbscan': {
+                ' --clustering_y ': list(range(num_class)),
+                ' --batch_size ': 128,
+                ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
+                ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100]
+            },
+            'grad_george': {
+                ' --overcluster_factor ': [1, 2, 5, 10],
+                ' --batch_size ': 128,
+            },
         }
 
     log_wandb = 0 if args.run == 0 else 1

@@ -375,12 +375,19 @@ def grass_clustering(
     clustering_path_use,
     grass_distance_type,
     file_name = None,
+    wandb_group_name = None,
+    job_type = None,
 ):      
     if log_wandb:
+        if wandb_group_name is None:
+            wandb_group_name = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier)
+        if job_type is None:
+            job_type = 'grass'
+
         try:
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
+                group = wandb_group_name,
                 config = {'eps': eps, 'min_samples': min_samples},
                 job_type = 'grass:y=%d' % y
             )
@@ -388,7 +395,7 @@ def grass_clustering(
             import wandb
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
+                group = wandb_group_name,
                 config = {'eps': eps, 'min_samples': min_samples},
                 job_type = 'grass:y=%d' % y
             )
@@ -547,6 +554,8 @@ def get_domain_grass(
                             true_domain,
                             False,
                             grass_distance_type,
+                            None,
+                            None,
                             None,
                         )
 
@@ -844,22 +853,29 @@ def george_clustering(
     true_group,
     folder_name, 
     file_name,
+    wandb_group_name = None,
+    job_type = None,
 ):
     if log_wandb:
+        if wandb_group_name is None:
+            wandb_group_name = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier)
+        if job_type is None:
+            job_type = 'george'
+
         try:
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
+                group = wandb_group_name,
                 config = {'overcluster_factor': overcluster_factor},
-                job_type = 'george',
+                job_type = job_type,
             )
         except:
             import wandb
             wandb.init(
                 project = 'privateDemographics',
-                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
+                group = wandb_group_name,
                 config = {'overcluster_factor': overcluster_factor},
-                job_type = 'george',
+                job_type = job_type,
             )
 
     print('UMAP dimension reduction...')
@@ -1009,6 +1025,8 @@ def get_domain_george(
             true_group,
             folder_name, 
             file_name,
+            None,
+            None,
         )
                 
     print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
@@ -1163,6 +1181,8 @@ def get_domain_grass_george_mix(
                 true_group,
                 folder_name, 
                 file_name,
+                None,
+                None,
             )
  
     print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
@@ -1612,6 +1632,8 @@ def pred_groups_grass(
         clustering_path_use,
         grass_distance_type,
         None,
+        None,
+        None,
     )
 
 def pred_groups_eiil(
@@ -1771,6 +1793,8 @@ def pred_groups_george(
         true_group,
         folder_name, 
         file_name,
+        None,
+        None,
     )
 
 def pred_groups_grass_george_mix(
@@ -1802,6 +1826,8 @@ def pred_groups_grass_george_mix(
     collect_representation,
     n_neighbors,
     clustering_method,
+    device,
+    model,
 ):
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
 
@@ -1881,6 +1907,8 @@ def pred_groups_grass_george_mix(
             clustering_path_use,
             grass_distance_type,
             clustering_file_name,
+            None,
+            '%s_%s_y=%d' % (collect_representation, clustering_method, y),
         )
     elif clustering_method == 'george':
         file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d.json' % (
@@ -1892,7 +1920,7 @@ def pred_groups_grass_george_mix(
             min_samples,
         ))
         ss, ars_score, pred_domain, pred_dict = george_clustering(
-            False,
+            log_wandb,
             dataset_name,
             outlier,
             overcluster_factor,
@@ -1913,6 +1941,8 @@ def pred_groups_grass_george_mix(
             true_group,
             folder_name, 
             file_name,
+            None,
+            '%s_%s' % (clustering_method, collect_representation),
         )
 
 
@@ -2798,6 +2828,8 @@ def main():
                 collect_representation,
                 n_neighbors,
                 clustering_method,
+                device,
+                model,
             )
     else:
         run_exp(

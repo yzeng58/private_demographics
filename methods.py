@@ -2672,8 +2672,8 @@ def parse_args():
     parser.add_argument('--george_cluster_method', default = 'gmm', type = str, choices = ['gmm', 'kmeans'])
     parser.add_argument('--metric_types', default = 'mean_loss', type = str, choices = ['mean_loss', 'composition'])
     parser.add_argument('--model', default = 'default', type = str, choices = models)
-    parser.add_argument('--collect_representation', default = 'grass', type = str, choices = ['grass', 'george'])
-    parser.add_argument('--clustering_method', default = 'george', type = str, choices = ['grass', 'george'])
+    # parser.add_argument('--collect_representation', default = 'grass', type = str, choices = ['grass', 'george'])
+    # parser.add_argument('--clustering_method', default = 'george', type = str, choices = ['grass', 'george'])
     parser.add_argument('--use_val_group', default = 1, type = int, choices = [0,1])
     parser.add_argument('--grass_distance_type', default = 'cosine', type = str, choices = ['cosine', 'euclidean'])
 
@@ -2725,10 +2725,19 @@ def main():
     george_cluster_method = args.george_cluster_method
     metric_types = args.metric_types
     model = args.model if args.model != 'default' else None
-    collect_representation = args.collect_representation
-    clustering_method = args.clustering_method
+    # collect_representation = args.collect_representation
+    # clustering_method = args.clustering_method
     use_val_group = args.use_val_group
     grass_distance_type = args.grass_distance_type
+
+    if method in ['grad_george', 'input_dbscan']:
+        if method == 'grad_george':
+            collect_representation = 'grass'
+            clustering_method = 'george'
+        else:
+            collect_representation = 'george'
+            clustering_method = 'grass'
+        method = 'grass_george_mix'
 
     if pred_groups_only:
         if method == 'grass':
@@ -2798,7 +2807,7 @@ def main():
                 device,
                 model,
             )
-        elif method == 'grass_george_mix':
+        elif method == 'grass_george_mix': 
             pred_groups_grass_george_mix(
                 dataset_name,
                 batch_size,
@@ -2831,6 +2840,7 @@ def main():
                 device,
                 model,
             )
+
     else:
         run_exp(
             method, 

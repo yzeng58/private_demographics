@@ -7,14 +7,16 @@ algs = [
     'cvar_doro',
     'eiil',
     'george',
-    'grass_george_mix',
+    'grad_george',
+    'input_dbscan',
 ]
 
 clustering_algs = [
     'grass',
     'eiil',
     'george',
-    'grass_george_mix',
+    'grad_george',
+    'input_dbscan',
 ]
 
 tasks = [

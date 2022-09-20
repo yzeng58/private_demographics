@@ -389,7 +389,7 @@ def grass_clustering(
                 project = 'privateDemographics',
                 group = wandb_group_name,
                 config = {'eps': eps, 'min_samples': min_samples},
-                job_type = 'grass:y=%d' % y
+                job_type = job_type,
             )
         except:
             import wandb
@@ -397,7 +397,7 @@ def grass_clustering(
                 project = 'privateDemographics',
                 group = wandb_group_name,
                 config = {'eps': eps, 'min_samples': min_samples},
-                job_type = 'grass:y=%d' % y
+                job_type = job_type,
             )
 
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
@@ -1942,7 +1942,7 @@ def pred_groups_grass_george_mix(
             folder_name, 
             file_name,
             None,
-            '%s_%s' % (clustering_method, collect_representation),
+            '%s_%s' % (collect_representation, clustering_method),
         )
 
 

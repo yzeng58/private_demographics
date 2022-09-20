@@ -14,6 +14,7 @@ clustering_algs = [
     'grass',
     'eiil',
     'george',
+    'grass_george_mix',
 ]
 
 tasks = [

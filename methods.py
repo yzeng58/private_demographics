@@ -374,6 +374,7 @@ def grass_clustering(
     true_domain,
     clustering_path_use,
     grass_distance_type,
+    file_name = None,
 ):      
     if log_wandb:
         try:
@@ -393,9 +394,10 @@ def grass_clustering(
             )
 
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-    file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
-        y, min_samples, eps,
-    ))
+    if file_name is None:
+        file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
+            y, min_samples, eps,
+        ))
 
     grad_y = grad[idx_class == y]
     print("idx_class counts:", np.unique(idx_class, return_counts=True))
@@ -545,6 +547,7 @@ def get_domain_grass(
                             true_domain,
                             False,
                             grass_distance_type,
+                            None,
                         )
 
                         print('Eps', eps, 'Min samples', min_samples)
@@ -917,18 +920,6 @@ def george_clustering(
     print("ARS: %.4f" % ars_score)
     print('Silhouette Score: %.4f' % ss)
 
-    if log_wandb:
-        group_stat = np.unique(pred_domain, return_counts = True)
-        wandb_log_dict = {
-            'ars': ars_score,
-            'ss': ss, 
-            'max_proportion': group_stat[1].max()/group_stat[1].sum(),
-            'min_proportion': group_stat[1].min()/group_stat[1].sum(),
-            'num_subgroups': group_stat[0].shape[0],
-        }
-        wandb.log(wandb_log_dict)
-        wandb.finish()
-
     pred_dict = {}
     pred_dict['ars'] = ars_score
     pred_dict['ss'] = ss
@@ -944,6 +935,18 @@ def george_clustering(
     with open(file_name, 'w') as f:
         json.dump(pred_dict, f)          
     print('Estimated domains are saved in %s' % file_name)
+
+    if log_wandb:
+        group_stat = np.unique(pred_domain, return_counts = True)
+        wandb_log_dict = {
+            'ars': ars_score,
+            'ss': ss, 
+            'max_proportion': group_stat[1].max()/group_stat[1].sum(),
+            'min_proportion': group_stat[1].min()/group_stat[1].sum(),
+            'num_subgroups': group_stat[0].shape[0],
+        }
+        wandb.log(wandb_log_dict)
+        wandb.finish()
 
     return ss, ars_score, pred_domain, pred_dict
     
@@ -1030,6 +1033,7 @@ def get_domain_george(
     }
 
 def get_domain_grass_george_mix(
+    clustering_path,
     model, 
     m,
     loader,
@@ -1055,10 +1059,8 @@ def get_domain_grass_george_mix(
     george_cluster_method = 'gmm',
     metric_types = 'mean_loss',
     load_pred_dict = True,
-    process_data = True,
     seed = 123,
     batch_size = 128,
-    grass_distance_type = 'cosine',
 ):  
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d.json' % (
@@ -1108,92 +1110,63 @@ def get_domain_grass_george_mix(
 
         if clustering_method == 'grass':
             for y in range(num_class):
-                data_y = data[idx_class == y]
-                if process_data:
-                    center = data_y.mean(axis=0)
-                    data_y = data_y - center
-                    data_y = normalize(data_y)
+                with open(clustering_path[y], 'rb') as f:
+                    dbscan_labels = np.load(f)
 
-                dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric=grass_distance_type)
-                dbscan.fit(data_y)
                 idx = idx_class == y
-                idx[idx] = dbscan.labels_ >= 0
-                pred_domain[idx] = dbscan.labels_[dbscan.labels_ >= 0] + num_group
+                idx[idx] = dbscan_labels >= 0
+                pred_domain[idx] = dbscan_labels[dbscan_labels >= 0] + num_group
                 # detect the outliers
                 idx = idx_class == y
-                idx[idx] = dbscan.labels_ < 0
+                idx[idx] = dbscan_labels < 0
                 pred_domain[idx] = -1
 
                 num_group = len(np.unique(pred_domain)) - int(-1 in pred_domain)
 
+            pred_dict = {}
+            pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
+            pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
+            pred_dict['ars']   = ARS(true_group, pred_domain)
+            pred_dict['ss']    = float(silhouette_score(data, pred_domain))
+            pred_dict['num_group'] = num_group
+
+            for mode in ['train', 'val']:
+                pred_dict['n_%s' % mode] = []
+                for g in range(pred_dict['num_group']):
+                    group = np.array(pred_dict[mode]) == g
+                    pred_dict['n_%s' % mode].append(int(group.sum()))
+
+            with open(file_name, 'w') as f:
+                json.dump(pred_dict, f)          
+            print('Estimated domains are saved in %s' % file_name)
+
         elif clustering_method == 'george':
-            print('UMAP dimension reduction...')
-
-            data_trans = torch.zeros((data.shape[0], n_components))
-            data = torch.tensor(data)
-            true_domain = torch.tensor(true_domain)
-            idx_class = torch.tensor(idx_class)
-            true_group = torch.tensor(true_group)
-
-            try:
-                with open(os.path.join(folder_name, '%s_umap.npy' % collect_representation), 'rb') as f:
-                    data_trans = np.load(f)
-
-            except:
-                for y in range(num_class):
-                    y_idx = idx_class == y
-                    reducer = umap.UMAP(random_state = seed, n_components = n_components, n_neighbors = n_neighbors, min_dist = min_dist)
-                    # umap only process 2d array
-                    data_2d = data[y_idx].reshape(data[y_idx].shape[0], np.prod(data[y_idx].shape[1:]))
-                    data_trans[y_idx] = torch.tensor(reducer.fit_transform(data_2d))
-
-                with open(os.path.join(folder_name, '%s_umap.npy' % collect_representation), 'wb') as f:
-                    np.save(f, data_trans)
-
-            cluster_model = OverclusterModel(
-                cluster_method = george_cluster_method, 
-                max_k = max_k, 
-                seed = seed, 
-                sil_cuda = False,
-                search = search_k,
-                oc_fac = overcluster_factor,
-            )
-
-            c_trainer = GEORGECluster(metric_types, superclasses_to_ignore = [])
-            group_to_models = c_trainer.train(
-                cluster_model, 
-                data_trans,
+            ss, ars_score, pred_domain, pred_dict = george_clustering(
+                False,
+                dataset_name,
+                outlier,
+                overcluster_factor,
+                n_components,
+                max_k,
+                seed,
+                search_k,
                 idx_mode,
-                idx_class,
+                min_dist,
+                metric_types,
+                n_neighbors,
                 num_class,
+                george_cluster_method,
                 losses,
-            )
-
-            pred_domain = c_trainer.evaluate(
-                group_to_models, 
-                data_trans,
+                data,
+                true_domain,
                 idx_class,
-                num_class,
+                true_group,
+                folder_name, 
+                file_name,
             )
-            num_group = len(np.unique(pred_domain))
-
-        ars_score = ARS(true_group, pred_domain)
-        pred_dict = {}
-        pred_dict['ars'] = ars_score
-        pred_dict['num_group'] = len(np.unique(pred_domain))
-        for mode in ['train', 'val']:
-            pred_dict[mode] = pred_domain[idx_mode == mode]
-            pred_dict['n_%s' % mode] = []
-            for g in range(pred_dict['num_group']):
-                group = pred_dict[mode] == g
-                pred_dict['n_%s' % mode].append(int(group.sum()))
-            pred_dict[mode] = pred_dict[mode].tolist()
-
-        with open(file_name, 'w') as f:
-            json.dump(pred_dict, f)          
-        print('Estimated domains are saved in %s' % file_name)
-                
+ 
     print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
+
     return {
         'train': DataLoader(
             DomainLoader(pred_dict['train']),
@@ -1638,6 +1611,7 @@ def pred_groups_grass(
         true_domain,
         clustering_path_use,
         grass_distance_type,
+        None,
     )
 
 def pred_groups_eiil(
@@ -1798,6 +1772,149 @@ def pred_groups_george(
         folder_name, 
         file_name,
     )
+
+def pred_groups_grass_george_mix(
+    dataset_name,
+    batch_size,
+    target_var,
+    domain, 
+    num_workers,
+    pin_memory,
+    task,
+    outlier,
+    load_representations,
+    start_model_path,
+    seed,
+    eps,
+    min_samples,
+    y,
+    log_wandb,
+    max_k,
+    search_k,
+    min_dist,
+    clustering_path_use,
+    process_data,
+    grass_distance_type,
+    overcluster_factor,
+    n_components,
+    metric_types,
+    george_cluster_method,
+    collect_representation,
+    n_neighbors,
+    clustering_method,
+):
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+
+    [
+        m,
+        loader,
+        optim,
+        model,
+        num_domain,
+        num_group,
+        lr_scheduler,
+        device,
+        n,
+        num_feature,
+        num_class,
+    ] = exp_init(
+        dataset_name,
+        batch_size,
+        target_var,
+        domain,
+        num_workers,
+        pin_memory,
+        task,
+        outlier,
+        load_representations,
+        start_model_path,
+        seed,
+        'george',
+        device,
+        1e-3,
+        1e-5,
+        model,
+    )
+
+    grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
+        model,
+        m,
+        loader,
+        device, 
+        optim,
+        num_domain,
+        num_group,
+        task,
+        lr_scheduler,
+        dataset_name,
+        num_class,
+    )
+
+    inputs, true_domain, idx_class, true_group, idx_mode, losses = collect_representations(
+        dataset_name,
+        loader,
+        device,
+        m,
+        num_domain,
+    )
+
+    if collect_representation == 'grass':
+        data = grad
+    elif collect_representation == 'george':
+        data = inputs
+
+    if clustering_method == 'grass':
+        clustering_file_name = os.path.join(folder_name, '%s_%s_y_%d_min_samples_%d_eps_%.2f.npy' % (
+            collect_representation, clustering_method, y, min_samples, eps,
+        ))
+        grass_clustering(
+            data,
+            dataset_name,
+            eps,
+            min_samples,
+            y,
+            log_wandb,
+            outlier,
+            process_data,
+            idx_class,
+            true_domain,
+            clustering_path_use,
+            grass_distance_type,
+            clustering_file_name,
+        )
+    elif clustering_method == 'george':
+        file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d.json' % (
+            collect_representation, 
+            clustering_method,
+            outlier, 
+            overcluster_factor,
+            eps,
+            min_samples,
+        ))
+        ss, ars_score, pred_domain, pred_dict = george_clustering(
+            False,
+            dataset_name,
+            outlier,
+            overcluster_factor,
+            n_components,
+            max_k,
+            seed,
+            search_k,
+            idx_mode,
+            min_dist,
+            metric_types,
+            n_neighbors,
+            num_class,
+            george_cluster_method,
+            losses,
+            data,
+            true_domain,
+            idx_class,
+            true_group,
+            folder_name, 
+            file_name,
+        )
+
 
 def run_exp(
     method, 
@@ -2106,6 +2223,7 @@ def run_exp(
         q = torch.ones(domain_loader['num_group'], device = device)
     elif method == 'grass_george_mix':
         domain_loader  = get_domain_grass_george_mix(
+            clustering_path,
             model, 
             m,
             loader,
@@ -2131,10 +2249,8 @@ def run_exp(
             george_cluster_method,
             metric_types,
             load_pred_dict,
-            process_grad,
             seed,
             batch_size,
-            grass_distance_type,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
@@ -2651,6 +2767,37 @@ def main():
                 epoch_ei,
                 device,
                 model,
+            )
+        elif method == 'grass_george_mix':
+            pred_groups_grass_george_mix(
+                dataset_name,
+                batch_size,
+                target_var,
+                domain, 
+                num_workers,
+                pin_memory,
+                task,
+                outlier,
+                load_representations,
+                start_model_path,
+                seed,
+                eps,
+                min_samples,
+                y,
+                log_wandb,
+                max_k,
+                search_k,
+                min_dist,
+                clustering_path_use,
+                process_grad,
+                grass_distance_type,
+                overcluster_factor,
+                n_components,
+                metric_types,
+                george_cluster_method,
+                collect_representation,
+                n_neighbors,
+                clustering_method,
             )
     else:
         run_exp(

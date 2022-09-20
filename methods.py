@@ -2121,8 +2121,8 @@ def run_exp(
     best_m = deepcopy(m)
 
     data_json = defaultdict(list)
+    clustering_path = None
     if method == 'grass':
-        clustering_path = None
         if clustering_path_use:
             if best_clustering_parameter: 
                 if dataset_name == 'civilcomments':
@@ -2184,6 +2184,11 @@ def run_exp(
                         'eps': eps,
                         'min_samples': min_samples,
                     })
+    elif method == 'grass_george_mix' and clustering_method == 'grass':
+        if dataset_name == 'toy':
+            clustering_path = [
+                
+            ]
 
         domain_loader = get_domain_grass(
             m, 

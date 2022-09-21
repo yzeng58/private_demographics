@@ -189,6 +189,7 @@ def collect_gradient(
     lr_scheduler,
     dataset_name,
     num_class,
+    outlier,
 ):
     """
     This function will return 
@@ -221,8 +222,13 @@ def collect_gradient(
     num_class: the number of class
     --------------
     """
+    if outlier:
+        folder_name = '%s/privateDemographics/results/%s/outliers' % (root_dir, dataset_name)
+    else:
+        folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
 
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    if not os.path.isdir(folder_name):
+        os.mkdir(folder_name)
     try:
         with open(os.path.join(folder_name, 'grad.npy'), 'rb') as f:
             grad = np.load(f)
@@ -308,8 +314,12 @@ def collect_representations(
     device,
     m,
     num_domain,
+    outlier,
 ):
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    if outlier:
+        folder_name = '%s/privateDemographics/results/%s/outliers' % (root_dir, dataset_name)
+    else:
+        folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
 
     try:
         with open(os.path.join(folder_name, 'inputs.npy'), 'rb') as f:
@@ -505,6 +515,7 @@ def get_domain_grass(
             lr_scheduler,
             dataset_name,
             num_class,
+            outlier,
         )
 
         pred_domain = np.zeros(true_domain.shape)
@@ -786,10 +797,11 @@ def get_domain_eiil(
     batch_size,
     num_class,
     load_pred_dict,
+    use_val_group,
 ):
     m = deepcopy(m)
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-    file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d.json' % (outlier, lr_ei, epoch_ei))
+    file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d_val_%d.json' % (outlier, lr_ei, epoch_ei, use_val_group))
 
     if os.path.isfile(file_name) and load_pred_dict:
         print('Loading estimated domains from %s' % file_name)
@@ -985,11 +997,12 @@ def get_domain_george(
     min_dist = 0,
     cluster_method = 'gmm', # ['gmm', 'kmeans'] -- gmm: gaussian mixture model, kmeans
     metric_types = 'mean_loss', # ['mean_loss', 'composition']
-    load_pred_dict = True
+    load_pred_dict = True,
+    use_val_group = 1,
 ):
     m = deepcopy(m)
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-    file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s.json' % (outlier, overcluster_factor))
+    file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s_val_%d.json' % (outlier, overcluster_factor, use_val_group))
 
     if os.path.isfile(file_name) and load_pred_dict:
         print('Loading estimated domains from %s' % file_name)
@@ -1002,6 +1015,7 @@ def get_domain_george(
             device,
             m,
             num_domain,
+            outlier,
         )
 
         ars_score, ss, pred_domain, pred_dict = george_clustering(
@@ -1080,15 +1094,17 @@ def get_domain_grass_george_mix(
     load_pred_dict = True,
     seed = 123,
     batch_size = 128,
+    use_val_group = 1,
 ):  
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-    file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d.json' % (
+    file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d_val_%d.json' % (
         collect_representation, 
         clustering_method,
         outlier, 
         overcluster_factor,
         eps,
         min_samples,
+        use_val_group,
     ))
 
     if os.path.isfile(file_name) and load_pred_dict:
@@ -1109,6 +1125,7 @@ def get_domain_grass_george_mix(
             lr_scheduler,
             dataset_name,
             num_class,
+            outlier,
         )
         
         inputs, true_domain, idx_class, true_group, idx_mode, losses = collect_representations(
@@ -1117,6 +1134,7 @@ def get_domain_grass_george_mix(
             device,
             m,
             num_domain,
+            outlier,
         )
 
         if collect_representation == 'grass':
@@ -1617,6 +1635,7 @@ def pred_groups_grass(
         lr_scheduler,
         dataset_name,
         num_class,
+        outlier,
     )
 
     grass_clustering(
@@ -1654,10 +1673,11 @@ def pred_groups_eiil(
     epoch_ei,
     device,
     model,
+    use_val_group,
 ):
 
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-    file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d.json' % (outlier, lr_ei, epoch_ei))
+    file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d_val_%d.json' % (outlier, lr_ei, epoch_ei, use_val_group))
 
     [
         m,
@@ -1728,10 +1748,11 @@ def pred_groups_george(
     device,
     model,
     log_wandb,
+    use_val_group,
 ):
 
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-    file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s.json' % (outlier, overcluster_factor))
+    file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s_val_%d.json' % (outlier, overcluster_factor, use_val_group))
 
     [
         m,
@@ -1770,6 +1791,7 @@ def pred_groups_george(
         device,
         m,
         num_domain,
+        outlier,
     )
 
     george_clustering(
@@ -1829,6 +1851,7 @@ def pred_groups_grass_george_mix(
     clustering_method,
     device,
     model,
+    use_val_group,
 ):
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
 
@@ -1875,6 +1898,7 @@ def pred_groups_grass_george_mix(
         lr_scheduler,
         dataset_name,
         num_class,
+        outlier,
     )
 
     inputs, true_domain, idx_class, true_group, idx_mode, losses = collect_representations(
@@ -1883,6 +1907,7 @@ def pred_groups_grass_george_mix(
         device,
         m,
         num_domain,
+        outlier,
     )
 
     if collect_representation == 'grass':
@@ -1912,13 +1937,14 @@ def pred_groups_grass_george_mix(
             '%s_%s_y=%d' % (collect_representation, clustering_method, y),
         )
     elif clustering_method == 'george':
-        file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d.json' % (
+        file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d_val_%d.json' % (
             collect_representation, 
             clustering_method,
             outlier, 
             overcluster_factor,
             eps,
             min_samples,
+            use_val_group,
         ))
         ss, ars_score, pred_domain, pred_dict = george_clustering(
             log_wandb,
@@ -2135,10 +2161,16 @@ def run_exp(
         if clustering_path_use:
             if best_clustering_parameter: 
                 if dataset_name == 'civilcomments':
-                    clustering_path = [
-                        '%s/privateDemographics/results/civilcomments/clustering_y_0_min_samples_50_eps_0.35.npy' % root_dir,
-                        '%s/privateDemographics/results/civilcomments/clustering_y_1_min_samples_100_eps_0.50.npy' % root_dir
-                    ]
+                    if not use_val_group:
+                        clustering_path = [
+                            '%s/privateDemographics/results/civilcomments/clustering_y_0_min_samples_100_eps_0.35.npy' % root_dir,
+                            '%s/privateDemographics/results/civilcomments/clustering_y_1_min_samples_50_eps_0.70.npy' % root_dir
+                        ]
+                    else:
+                        clustering_path = [
+                            '%s/privateDemographics/results/civilcomments/clustering_y_0_min_samples_50_eps_0.35.npy' % root_dir,
+                            '%s/privateDemographics/results/civilcomments/clustering_y_1_min_samples_100_eps_0.50.npy' % root_dir
+                        ]
                 elif dataset_name == 'waterbirds':
                     if not use_val_group:
                         clustering_path = [
@@ -2168,18 +2200,18 @@ def run_exp(
                         ]
                 elif dataset_name == 'compas':
                     if not use_val_group:
-                        # clustering_path = [
-                        #     '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 5, 0.1),
-                        #     '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 10, 0.1),
-                        # ]
                         clustering_path = [
-                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 60, 0.1),
-                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 60, 0.4),
+                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 50, 0.1),
+                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 10, 0.1),
                         ]
+                        # clustering_path = [
+                        #     '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 60, 0.1),
+                        #     '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 60, 0.4),
+                        # ]
                     else:
                         clustering_path = [
-                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 60, 0.1),
-                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 60, 0.4),
+                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 50, 0.1),
+                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 60, 0.15),
                         ]
                 elif dataset_name == 'multinli':
                     # clustering_path = [
@@ -2236,6 +2268,7 @@ def run_exp(
             batch_size,
             num_class,
             load_pred_dict,
+            use_val_group,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
@@ -2260,12 +2293,13 @@ def run_exp(
                 george_cluster_method, # ['gmm', 'kmeans'] -- gmm: gaussian mixture model, kmeans
                 metric_types, # ['mean_loss', 'composition']
                 load_pred_dict,
+                use_val_group,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
         q = torch.ones(domain_loader['num_group'], device = device)
-    elif method == 'grass_george_mix' and clustering_method == 'grass':
-        if clustering_path_use:
+    elif method == 'grass_george_mix':
+        if clustering_path_use and clustering_method == 'grass':
             if best_clustering_parameter: 
                 if dataset_name == 'toy':
                     if use_val_group:
@@ -2300,6 +2334,7 @@ def run_exp(
                             '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.10.npy' % (root_dir, dataset_name),
                             '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_50_eps_0.25.npy' % (root_dir, dataset_name),  
                         ]
+
         domain_loader  = get_domain_grass_george_mix(
             clustering_path,
             model, 
@@ -2329,6 +2364,7 @@ def run_exp(
             load_pred_dict,
             seed,
             batch_size,
+            use_val_group,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
@@ -2838,6 +2874,7 @@ def main():
                 device,
                 model,
                 log_wandb,
+                use_val_group,
             )
         elif method == 'eiil':
             pred_groups_eiil(
@@ -2857,6 +2894,7 @@ def main():
                 epoch_ei,
                 device,
                 model,
+                use_val_group,
             )
         elif method == 'grass_george_mix': 
             pred_groups_grass_george_mix(
@@ -2890,6 +2928,7 @@ def main():
                 clustering_method,
                 device,
                 model,
+                use_val_group,
             )
 
     else:

@@ -40,10 +40,10 @@ def toyData(train_val_test = (0.6,0.2,0.2), seed = 123, var = 0.1, outlier = 1):
         outliers[1] = [(2,3), (2,5)]
         for y in outliers:
             X[y], Y[y], A[y] = [], [], []
-            for outlier in outliers[y]:
-                X[y].append(np.random.multivariate_normal(outlier, np.eye(2)*var, 10))
+            for out in outliers[y]:
+                X[y].append(np.random.multivariate_normal(out, np.eye(2)*var, 10))
                 Y[y].append(np.ones(10) * y)
-                A[y].append(np.random.choice(2, 10))
+                A[y].append(-np.ones(10))
             X[y], Y[y], A[y] = np.concatenate(X[y]), np.concatenate(Y[y]), np.concatenate(A[y])
             outlier_df[y] = pd.DataFrame(X[y], columns = ['x1', 'x2'])
             outlier_df[y]['y'] = Y[y]
@@ -60,7 +60,7 @@ def toyData(train_val_test = (0.6,0.2,0.2), seed = 123, var = 0.1, outlier = 1):
     split_df['train'], split_df['val'], split_df['test'] = data_df.iloc[:n_train], data_df.iloc[n_train: (n_train + n_val)], data_df.iloc[(n_train + n_val):], 
 
     for mode in ['train', 'val', 'test']:
-        file_name = '%s/privateDemographics/data/toy/%s.csv' % (root_dir, mode)
+        file_name = '%s/privateDemographics/data/toy/%s_outlier_%d.csv' % (root_dir, mode, outlier)
         split_df[mode].to_csv(file_name, index = False)
             
     return split_df
@@ -307,7 +307,7 @@ def read_data(
             else:
                 df['train_supp'] = df['train'].copy()
 
-        num_domain = len(set(df['val'][domain]))
+        num_domain = len(set(df['val'][domain].tolist() + df['train'][domain].tolist() + df['test'][domain].tolist()))
         num_class = len(set(df['val'][target_var]))
         num_feature = df['val'].shape[1] - 2
 

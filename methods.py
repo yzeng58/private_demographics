@@ -23,6 +23,13 @@ from torch.autograd import grad
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 #########################################################
 
+def results_dir(root_dir, dataset_name, outlier):
+    if outlier:
+        folder_name = '%s/privateDemographics/results/%s/outliers' % (root_dir, dataset_name)
+    else:
+        folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    return folder_name
+
 def exp_init(
     dataset_name,
     batch_size,
@@ -54,9 +61,11 @@ def exp_init(
         val_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/val.csv' % root_dir
         test_path = '%s/privateDemographics/data/synthetic_moon_(100,30,300)_circles_(200,30,300)_factor_0.5_blobs_(1000,300,300)_noise_(0.1,0.1,0.1)_seed_123/test.csv' % root_dir
     elif dataset_name == 'toy':
-        train_path = '%s/privateDemographics/data/toy/%s.csv' % (root_dir, 'train')
-        val_path = '%s/privateDemographics/data/toy/%s.csv' % (root_dir, 'val')
-        test_path = '%s/privateDemographics/data/toy/%s.csv' % (root_dir, 'test')
+        print("Loading the toy dataset with outlier = %d!" % outlier)
+        train_path = '%s/privateDemographics/data/toy/%s_outlier_%d.csv' % (root_dir, 'train', outlier)
+        val_path = '%s/privateDemographics/data/toy/%s_outlier_%d.csv' % (root_dir, 'val', outlier)
+        test_path = '%s/privateDemographics/data/toy/%s_outlier_%d.csv' % (root_dir, 'test', outlier)
+
     elif dataset_name in ['waterbirds', 'civilcomments', 'multinli', 'compas']:
         train_path = '%s/balanceGroups/data/%s' % (root_dir, dataset_name)
         val_path = None,
@@ -222,10 +231,7 @@ def collect_gradient(
     num_class: the number of class
     --------------
     """
-    if outlier:
-        folder_name = '%s/privateDemographics/results/%s/outliers' % (root_dir, dataset_name)
-    else:
-        folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    folder_name = results_dir(root_dir, dataset_name, outlier)
 
     if not os.path.isdir(folder_name):
         os.mkdir(folder_name)
@@ -316,10 +322,7 @@ def collect_representations(
     num_domain,
     outlier,
 ):
-    if outlier:
-        folder_name = '%s/privateDemographics/results/%s/outliers' % (root_dir, dataset_name)
-    else:
-        folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    folder_name = results_dir(root_dir, dataset_name, outlier)
 
     try:
         with open(os.path.join(folder_name, 'inputs.npy'), 'rb') as f:
@@ -410,7 +413,7 @@ def grass_clustering(
                 job_type = job_type,
             )
 
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    folder_name = results_dir(root_dir, dataset_name, outlier)
     if file_name is None:
         file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
             y, min_samples, eps,
@@ -492,7 +495,7 @@ def get_domain_grass(
     grass_distance_type,
 ):
     m = deepcopy(m)
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    folder_name = results_dir(root_dir, dataset_name, outlier)
     file_name = os.path.join(folder_name, 'pred_dict_outlier_%s_val_%d.json' % (outlier, use_val_group))
 
     if load_pred_dict: 
@@ -800,7 +803,7 @@ def get_domain_eiil(
     use_val_group,
 ):
     m = deepcopy(m)
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    folder_name = results_dir(root_dir, dataset_name, outlier)
     file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d_val_%d.json' % (outlier, lr_ei, epoch_ei, use_val_group))
 
     if os.path.isfile(file_name) and load_pred_dict:
@@ -1001,7 +1004,7 @@ def get_domain_george(
     use_val_group = 1,
 ):
     m = deepcopy(m)
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    folder_name = results_dir(root_dir, dataset_name, outlier)
     file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s_val_%d.json' % (outlier, overcluster_factor, use_val_group))
 
     if os.path.isfile(file_name) and load_pred_dict:
@@ -1096,7 +1099,7 @@ def get_domain_grass_george_mix(
     batch_size = 128,
     use_val_group = 1,
 ):  
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    folder_name = results_dir(root_dir, dataset_name, outlier)
     file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d_val_%d.json' % (
         collect_representation, 
         clustering_method,
@@ -1676,7 +1679,7 @@ def pred_groups_eiil(
     use_val_group,
 ):
 
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    folder_name = results_dir(root_dir, dataset_name, outlier)
     file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d_val_%d.json' % (outlier, lr_ei, epoch_ei, use_val_group))
 
     [
@@ -1751,7 +1754,7 @@ def pred_groups_george(
     use_val_group,
 ):
 
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    folder_name = results_dir(root_dir, dataset_name, outlier)
     file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s_val_%d.json' % (outlier, overcluster_factor, use_val_group))
 
     [
@@ -1853,7 +1856,7 @@ def pred_groups_grass_george_mix(
     model,
     use_val_group,
 ):
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+    folder_name = results_dir(root_dir, dataset_name, outlier)
 
     [
         m,
@@ -2157,52 +2160,53 @@ def run_exp(
 
     data_json = defaultdict(list)
     clustering_path = None
+    folder_name = results_dir(root_dir, dataset_name, outlier)
     if method == 'grass':
         if clustering_path_use:
             if best_clustering_parameter: 
                 if dataset_name == 'civilcomments':
                     if not use_val_group:
                         clustering_path = [
-                            '%s/privateDemographics/results/civilcomments/clustering_y_0_min_samples_100_eps_0.35.npy' % root_dir,
-                            '%s/privateDemographics/results/civilcomments/clustering_y_1_min_samples_50_eps_0.70.npy' % root_dir
+                            '%s/clustering_y_0_min_samples_100_eps_0.35.npy' % folder_name,
+                            '%s/clustering_y_1_min_samples_50_eps_0.70.npy' % folder_name
                         ]
                     else:
                         clustering_path = [
-                            '%s/privateDemographics/results/civilcomments/clustering_y_0_min_samples_50_eps_0.35.npy' % root_dir,
-                            '%s/privateDemographics/results/civilcomments/clustering_y_1_min_samples_100_eps_0.50.npy' % root_dir
+                            '%s/civilcomments/clustering_y_0_min_samples_50_eps_0.35.npy' % folder_name,
+                            '%s/civilcomments/clustering_y_1_min_samples_100_eps_0.50.npy' % folder_name
                         ]
                 elif dataset_name == 'waterbirds':
                     if not use_val_group:
                         clustering_path = [
-                            '%s/privateDemographics/results/waterbirds/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 40, 0.2),
-                            '%s/privateDemographics/results/waterbirds/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 100, 0.35),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 40, 0.2),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 100, 0.35),
                         ]
                     else:
                         clustering_path = [
-                            '%s/privateDemographics/results/waterbirds/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 20, 0.5),
-                            '%s/privateDemographics/results/waterbirds/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 5, 0.25),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 20, 0.5),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 5, 0.25),
                         ]
                 elif dataset_name == 'synthetic':
                     clustering_path = [
-                        '%s/privateDemographics/results/synthetic/clustering_y_0_min_samples_20_eps_0.40.npy' % root_dir,
-                        '%s/privateDemographics/results/synthetic/clustering_y_1_min_samples_60_eps_0.45.npy' % root_dir
+                        '%s/clustering_y_0_min_samples_20_eps_0.40.npy' % folder_name,
+                        '%s/clustering_y_1_min_samples_60_eps_0.45.npy' % folder_name
                     ]
                 elif dataset_name == 'toy':
                     if not use_val_group:
                         clustering_path = [
-                            '%s/privateDemographics/results/toy/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 40, 0.2),
-                            '%s/privateDemographics/results/toy/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 100, 0.4),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 40, 0.2),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 100, 0.4),
                         ]
                     else:
                         clustering_path = [
-                            '%s/privateDemographics/results/toy/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 100, 0.45),
-                            '%s/privateDemographics/results/toy/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 100, 0.1),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 100, 0.45),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 100, 0.1),
                         ]
                 elif dataset_name == 'compas':
                     if not use_val_group:
                         clustering_path = [
-                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 50, 0.1),
-                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 10, 0.1),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 50, 0.1),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 10, 0.1),
                         ]
                         # clustering_path = [
                         #     '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 60, 0.1),
@@ -2210,8 +2214,8 @@ def run_exp(
                         # ]
                     else:
                         clustering_path = [
-                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 0, 50, 0.1),
-                            '%s/privateDemographics/results/compas/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (root_dir, 1, 60, 0.15),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 50, 0.1),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 60, 0.15),
                         ]
                 elif dataset_name == 'multinli':
                     # clustering_path = [
@@ -2221,8 +2225,8 @@ def run_exp(
                     clustering_path = None
             else:
                 clustering_path = [
-                    '%s/privateDemographics/results/%s/clustering_y_0_min_samples_%d_eps_%.2f.npy' % (root_dir, dataset_name, min_samples, eps),
-                    '%s/privateDemographics/results/%s/clustering_y_1_min_samples_%d_eps_%.2f.npy' % (root_dir, dataset_name, min_samples, eps)
+                    '%s/clustering_y_0_min_samples_%d_eps_%.2f.npy' % (folder_name, min_samples, eps),
+                    '%s/clustering_y_1_min_samples_%d_eps_%.2f.npy' % (folder_name, min_samples, eps)
                 ]
                 if log_wandb:
                     wandb.log({
@@ -2304,35 +2308,35 @@ def run_exp(
                 if dataset_name == 'toy':
                     if use_val_group:
                         clustering_path = [
-                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.30.npy' % (root_dir, dataset_name),
-                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_100_eps_0.35.npy' % (root_dir, dataset_name),
+                            '%s/george_grass_y_0_min_samples_100_eps_0.30.npy' % (folder_name),
+                            '%s/george_grass_y_1_min_samples_100_eps_0.35.npy' % (folder_name),
                         ]
                     else:
                         clustering_path = [
-                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.45.npy' % (root_dir, dataset_name),
-                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_100_eps_0.10.npy' % (root_dir, dataset_name),
+                            '%s/george_grass_y_0_min_samples_100_eps_0.45.npy' % (folder_name),
+                            '%s/george_grass_y_1_min_samples_100_eps_0.10.npy' % (folder_name),
                         ]
                 elif dataset_name == 'waterbirds':
                     if use_val_group:
                         clustering_path = [
-                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_30_eps_0.55.npy' % (root_dir, dataset_name),
-                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_20_eps_0.60.npy' % (root_dir, dataset_name),
+                            '%s/george_grass_y_0_min_samples_30_eps_0.55.npy' % (folder_name),
+                            '%s/george_grass_y_1_min_samples_20_eps_0.60.npy' % (folder_name),
                         ]
                     else:
                         clustering_path = [
-                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.60.npy' % (root_dir, dataset_name),
-                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_40_eps_0.65.npy' % (root_dir, dataset_name),
+                            '%s/george_grass_y_0_min_samples_100_eps_0.60.npy' % (folder_name),
+                            '%s/george_grass_y_1_min_samples_40_eps_0.65.npy' % (folder_name),
                         ]
                 elif dataset_name == 'compas':
                     if use_val_group:
                         clustering_path = [
-                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.10.npy' % (root_dir, dataset_name),
-                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_5_eps_0.10.npy' % (root_dir, dataset_name),
+                            '%s/george_grass_y_0_min_samples_100_eps_0.10.npy' % (folder_name),
+                            '%s/george_grass_y_1_min_samples_5_eps_0.10.npy' % (folder_name),
                         ]
                     else:
                         clustering_path = [
-                            '%s/privateDemographics/results/%s/george_grass_y_0_min_samples_100_eps_0.10.npy' % (root_dir, dataset_name),
-                            '%s/privateDemographics/results/%s/george_grass_y_1_min_samples_50_eps_0.25.npy' % (root_dir, dataset_name),  
+                            '%s/george_grass_y_0_min_samples_100_eps_0.10.npy' % (folder_name),
+                            '%s/george_grass_y_1_min_samples_50_eps_0.25.npy' % (folder_name),  
                         ]
 
         domain_loader  = get_domain_grass_george_mix(

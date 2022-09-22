@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import torch, os, json, itertools, warnings, logging
+import torch, os, json, itertools, warnings, logging, plotly
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
@@ -23,6 +23,8 @@ from sklearn.metrics import silhouette_samples as s_sil
 from sklearn.utils import gen_batches, get_chunk_n_rows
 from copy import deepcopy
 from collections import defaultdict
+import plotly.graph_objs as go
+from sklearn.manifold import TSNE
 
 ################## MODEL SETTING ########################
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -1093,3 +1095,69 @@ class GEORGECluster:
             k = get_k_from_model(cluster_model)  # accounts for degenerate cases
             cluster_floor = cluster_floor + k
         return pred_domain
+
+def vis_3d_tsne_interactive(
+    dataset = 'waterbirds', 
+    mode = 'true',
+    outlier = 1,
+    vis_group = None,
+    vis_representation = 'grad',
+):
+    n_components = 3
+    # Configure the layout.
+    layout = go.Layout(
+        margin={'l': 0, 'r': 0, 'b': 0, 't': 0},
+        showlegend=True,
+    )
+    if outlier:
+        folder_name = '%s/privateDemographics/results/%s/outliers' % (root_dir, dataset)
+    else:
+        folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset)
+
+    grad_tsne = {}
+    file_name = '%s/%s_tsne_dim_%d.npy' % (folder_name, vis_representation, n_components)
+    try:
+        print('Loading the TSNE results...')
+        grad_tsne[dataset] = np.load(file_name,allow_pickle=True)    
+    except:
+        print('Performing TSNE dimension reduction...')
+        grad = np.load('%s/%s.npy' % (folder_name, vis_representation),allow_pickle=True)
+        grad_tsne[dataset] = TSNE(n_components=n_components, learning_rate='auto', init='random', perplexity=3).fit_transform(grad) 
+        print(grad_tsne[dataset])
+        with open(file_name, 'wb') as f:
+            print('Saving the TSNE results...')
+            np.save(f, grad_tsne[dataset])
+
+    if mode == 'true':
+        true_group = np.load('%s/true_group.npy' % (folder_name))
+        vis_group = true_group
+    elif mode == 'pred':
+        try:
+            with open('%s/pred_dict_outlier_0.json' % (folder_name), 'r') as f:
+                pred_dict = json.load(f)
+        except:
+            with open('%s/pred_dict.json' % (folder_name), 'r') as f:
+                pred_dict = json.load(f)
+        pred_group = pred_dict['train'] + pred_dict['val']
+        vis_group = pred_group
+
+    groups = np.unique(vis_group)
+    data = []
+    trace = go.Scatter3d(
+        x=grad_tsne[dataset][:, 0],  # <-- Put your data instead
+        y=grad_tsne[dataset][:, 1],  # <-- Put your data instead
+        z=grad_tsne[dataset][:, 2],  # <-- Put your data instead
+        mode='markers',
+        marker={
+            'size': 4,
+            'opacity': 0.8,
+            'color': vis_group,
+        }
+    )
+
+    data.append(trace)
+    plot_figure = go.Figure(data=data, layout=layout)
+
+    # Render the plot.
+    plotly.offline.iplot(plot_figure)
+

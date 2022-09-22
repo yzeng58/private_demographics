@@ -12,7 +12,7 @@ sys.path.insert(1, '%s/noHarmFairness/references/BalancingGroups/branches' % roo
 from clean_up.datasets import get_loaders
 from utils import group_idx
 
-def toyData(train_val_test = (0.6,0.2,0.2), seed = 123, var = 0.1):
+def toyData(train_val_test = (0.6,0.2,0.2), seed = 123, var = 0.1, outlier = 1):
     np.random.seed(seed)
     X, Y, dfs, centers = {}, {}, {}, defaultdict(dict)
     
@@ -32,8 +32,25 @@ def toyData(train_val_test = (0.6,0.2,0.2), seed = 123, var = 0.1):
         dfs[a] = pd.DataFrame(X[a], columns = ['x1', 'x2'])
         dfs[a]['y'] = Y[a]
         dfs[a]['a'] = a
+      
+    outliers, X, Y, A, outlier_df = {}, {}, {}, {}, {}
+    
+    if outlier:
+        outliers[0] = [(-1,5), (-1,3)]
+        outliers[1] = [(2,3), (2,5)]
+        for y in outliers:
+            X[y], Y[y], A[y] = [], [], []
+            for outlier in outliers[y]:
+                X[y].append(np.random.multivariate_normal(outlier, np.eye(2)*var, 10))
+                Y[y].append(np.ones(10) * y)
+                A[y].append(np.random.choice(2, 10))
+            X[y], Y[y], A[y] = np.concatenate(X[y]), np.concatenate(Y[y]), np.concatenate(A[y])
+            outlier_df[y] = pd.DataFrame(X[y], columns = ['x1', 'x2'])
+            outlier_df[y]['y'] = Y[y]
+            outlier_df[y]['a'] = A[y]
+    
         
-    data_df = pd.concat([dfs[a] for a in centers], ignore_index = True).sample(frac = 1, random_state = seed).reset_index(drop = True)
+    data_df = pd.concat([dfs[a] for a in centers] + [outlier_df[y] for y in outliers], ignore_index = True).sample(frac = 1, random_state = seed).reset_index(drop = True)
     
     split_df = {}
     frac_train, frac_val, frac_test = train_val_test

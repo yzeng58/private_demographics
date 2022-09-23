@@ -250,7 +250,7 @@ def main(args):
                 ' --weight_decay ': [1e-1, 1e-2],
             },
             'eiil': {
-                ' --epoch ': 10,
+                ' --epoch ': 8,
                 ' --batch_size ': 32,
                 ' --lr_q ': [.001, .01, .1],
                 ' --lr ': [1e-5, 1e-4, 1e-3],

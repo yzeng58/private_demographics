@@ -28,6 +28,7 @@ def main(args):
     process_grad = args.process_grad
     model = args.model
     use_val_group = args.use_val_group
+    require_a100 = False
 
     if dataset == 'synthetic':
         cores = '2+1'
@@ -257,9 +258,10 @@ def main(args):
                 ' --lr_ei ': 1e-4, # selected
                 ' --epoch_ei ': 3, # selected
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
-                ' -require ': 'a100',
             },
         }
+        
+        if method == 'eiil': require_a100 = True
 
     elif dataset == 'multinli':
         queue = 'x86_24h'
@@ -396,6 +398,7 @@ def main(args):
             'privateDemographics',
             cores,
             mem,
+            require_a100,
         ) 
     else:
         print(cmd_list[0])   

@@ -257,7 +257,7 @@ def main(args):
                 ' --lr_ei ': 1e-4, # selected
                 ' --epoch_ei ': 3, # selected
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
-                ' --require ': 'a100',
+                ' -require ': 'a100',
             },
         }
 

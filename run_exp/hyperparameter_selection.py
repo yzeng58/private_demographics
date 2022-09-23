@@ -211,7 +211,7 @@ def main(args):
         task = 'fairness'
         cores = '4+1'
         start_model_path = '%s/privateDemographics/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'  % root_dir
-        mem = '64g'
+        mem = '32g'
 
         param_grid = {
             'erm': {
@@ -257,6 +257,7 @@ def main(args):
                 ' --lr_ei ': 1e-4, # selected
                 ' --epoch_ei ': 3, # selected
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --require ': 'a100',
             },
         }
 

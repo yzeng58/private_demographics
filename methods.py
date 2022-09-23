@@ -2204,16 +2204,28 @@ def run_exp(
                         '%s/clustering_y_1_min_samples_60_eps_0.45.npy' % folder_name
                     ]
                 elif dataset_name == 'toy':
-                    if not use_val_group:
-                        clustering_path = [
-                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 40, 0.2),
-                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 100, 0.4),
-                        ]
+                    if outlier:
+                        if use_val_group:
+                            clustering_path = [
+                                '%s/clustering_y_0_min_samples_100_eps_0.55.npy' % (folder_name),
+                                '%s/clustering_y_1_min_samples_100_eps_0.55.npy' % (folder_name),
+                            ]
+                        else:
+                            clustering_path = [
+                                '%s/clustering_y_0_min_samples_60_eps_0.35.npy' % (folder_name),
+                                '%s/clustering_y_1_min_samples_60_eps_0.40.npy' % (folder_name),
+                            ]
                     else:
-                        clustering_path = [
-                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 100, 0.45),
-                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 100, 0.1),
-                        ]
+                        if not use_val_group:
+                            clustering_path = [
+                                '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 40, 0.2),
+                                '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 100, 0.4),
+                            ]
+                        else:
+                            clustering_path = [
+                                '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 100, 0.45),
+                                '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 100, 0.1),
+                            ]
                 elif dataset_name == 'compas':
                     if not use_val_group:
                         clustering_path = [
@@ -2318,16 +2330,28 @@ def run_exp(
         if clustering_path_use and clustering_method == 'grass':
             if best_clustering_parameter: 
                 if dataset_name == 'toy':
-                    if use_val_group:
-                        clustering_path = [
-                            '%s/george_grass_y_0_min_samples_100_eps_0.30.npy' % (folder_name),
-                            '%s/george_grass_y_1_min_samples_100_eps_0.35.npy' % (folder_name),
-                        ]
+                    if outlier:
+                        if use_val_group:
+                            clustering_path = [
+                                '%s/george_grass_y_0_min_samples_100_eps_0.55.npy' % (folder_name),
+                                '%s/george_grass_y_1_min_samples_100_eps_0.55.npy' % (folder_name),
+                            ]
+                        else:
+                            clustering_path = [
+                                '%s/george_grass_y_0_min_samples_60_eps_0.35.npy' % (folder_name),
+                                '%s/george_grass_y_1_min_samples_60_eps_0.40.npy' % (folder_name),
+                            ]
                     else:
-                        clustering_path = [
-                            '%s/george_grass_y_0_min_samples_100_eps_0.45.npy' % (folder_name),
-                            '%s/george_grass_y_1_min_samples_100_eps_0.10.npy' % (folder_name),
-                        ]
+                        if use_val_group:
+                            clustering_path = [
+                                '%s/george_grass_y_0_min_samples_100_eps_0.30.npy' % (folder_name),
+                                '%s/george_grass_y_1_min_samples_100_eps_0.35.npy' % (folder_name),
+                            ]
+                        else:
+                            clustering_path = [
+                                '%s/george_grass_y_0_min_samples_100_eps_0.45.npy' % (folder_name),
+                                '%s/george_grass_y_1_min_samples_100_eps_0.10.npy' % (folder_name),
+                            ]
                 elif dataset_name == 'waterbirds':
                     if outlier:
                         if use_val_group:

@@ -86,7 +86,10 @@ def main(args):
 
     elif dataset == 'toy':
         queue = 'x86_1h'
-        start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_1.0_outlier_0_model_logreg_best.model' % root_dir
+        if outlier:
+            start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.01_outlier_1_model_logreg_best.model' % root_dir
+        else:
+            start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_100_batch_size_128_lr_0.001_subsample_0_weight_decay_1.0_outlier_0_model_logreg_best.model' % root_dir
         num_class = 2
         cores = '2+0'
 
@@ -121,7 +124,7 @@ def main(args):
     elif dataset == 'waterbirds':
         queue = 'x86_1h'
         if outlier:
-            start_model_path = '../privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_outlier_1_weight_decay_0.0001_best.model'
+            start_model_path = '%s/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_outlier_1_weight_decay_0.0001_best.model' % root_dir
         else:
             start_model_path = '%s/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_1e-05_subsample_False_weight_decay_1_best.model' % root_dir
 

@@ -142,7 +142,7 @@ def main(args):
                 start_model_path = "%s/privateDemographics/models/waterbirds/erm_num_epoch_360_batch_size_128_lr_0.001_subsample_0_weight_decay_0.1_outlier_1_model_resnet50_best.model" % root_dir
             else:
                 start_model_path = "''"
-
+        
         param_grid = {
             'erm': {
                 ' --epoch ': 360,

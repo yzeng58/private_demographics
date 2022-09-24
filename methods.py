@@ -2685,8 +2685,8 @@ def inference(
                 domain_loss[g] += F.cross_entropy(output[group], labels[group], reduction = 'sum').item()
 
     domain_acc, loss, domain_loss = domain_acc / torch.clamp(n[mode],min=1), loss / n[mode].sum(), domain_loss / torch.clamp(n[mode],min=1)
-    worst_acc = domain_acc.min()
-    fair_loss = domain_loss.max()
+    worst_acc = domain_acc[considered_groups].min()
+    fair_loss = domain_loss[considered_groups].max()
     avg_acc = avg_acc / n[mode].sum()
     reweighted_avg_acc = domain_acc @ (n['train'] / n['train'].sum())
 
@@ -2726,7 +2726,7 @@ def inference(
     print('##############################')
     print('#    True Group Statistics   #')
     print('##############################')
-    print('------------------' + '---------' * (num_group))
+    print('------------------' + '---------' * (num_valid_groups))
     print_header    = '|      metric    |'
     print_acc       = '|    accuracy    |'
     print_loss      = '|      loss      |'

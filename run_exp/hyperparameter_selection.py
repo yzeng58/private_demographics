@@ -29,6 +29,7 @@ def main(args):
     model = args.model
     use_val_group = args.use_val_group
     require_a100 = False
+    ignored_domain = -1
 
     if dataset == 'synthetic':
         cores = '2+1'
@@ -134,6 +135,7 @@ def main(args):
             param_grid['eiil'][' --lr_ei '] = 0.01
             param_grid['george'][' --overcluster_factor '] = 10 # selected
             param_grid['grad_george'][' --overcluster_factor '] = 1 # selected
+            ignored_domain = 2
 
     elif dataset == 'waterbirds':
         queue = 'x86_24h'
@@ -383,7 +385,8 @@ def main(args):
         ' --outlier ' + str(outlier) +\
         ' --process_grad ' + str(process_grad) +\
         ' --model ' + model +\
-        ' --use_val_group ' + str(use_val_group)
+        ' --use_val_group ' + str(use_val_group) +\
+        ' --ignored_domain ' + str(ignored_domain)
 
     cmd_list = [cmd_pre]
     

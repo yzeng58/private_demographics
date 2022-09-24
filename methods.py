@@ -2019,6 +2019,7 @@ def run_exp(
     clustering_method = 'george',
     use_val_group = False,
     grass_distance_type = 'cosine',
+    ignored_domain = None,
 ):
 
     (   
@@ -2462,6 +2463,7 @@ def run_exp(
                 device = device, 
                 log_wandb = log_wandb,
                 domain_loader = domain_loader,
+                ignored_domain = ignored_domain,
             )
             print('=============== Validation ===============')
             best_m, best_criterion, selected_epoch = inference(
@@ -2482,6 +2484,7 @@ def run_exp(
                 epoch = num_epoch,
                 selected_epoch = selected_epoch,
                 domain_loader = domain_loader,
+                ignored_domain = ignored_domain,
             )
         except ValueError:
             m.load_state_dict(old_m.state_dict())
@@ -2505,6 +2508,7 @@ def run_exp(
             device = device, 
             log_wandb = log_wandb,
             domain_loader = domain_loader,
+            ignored_domain = ignored_domain,
         )
         print('=============== Validation ===============')
         best_m, best_criterion, selected_epoch = inference(
@@ -2525,6 +2529,7 @@ def run_exp(
             epoch = num_epoch,
             selected_epoch = selected_epoch,
             domain_loader = domain_loader,
+            ignored_domain = ignored_domain,
         )
     
     print('=============================================')
@@ -2548,6 +2553,7 @@ def run_exp(
         epoch = selected_epoch,
         selected_epoch = selected_epoch,
         domain_loader = domain_loader,
+        ignored_domain = ignored_domain,
     )
     print('=============== Test ================')
     inference(
@@ -2566,6 +2572,7 @@ def run_exp(
         best_m = best_m, 
         best_criterion = best_criterion,
         domain_loader = domain_loader,
+        ignored_domain = ignored_domain,
     )
 
     setting_name = method
@@ -2822,6 +2829,7 @@ def parse_args():
     # parser.add_argument('--clustering_method', default = 'george', type = str, choices = ['grass', 'george'])
     parser.add_argument('--use_val_group', default = 1, type = int, choices = [0,1])
     parser.add_argument('--grass_distance_type', default = 'cosine', type = str, choices = ['cosine', 'euclidean'])
+    parser.add_argument('--ignored_domain', default = -1, type = int)
 
     args = parser.parse_args()
 
@@ -2875,6 +2883,7 @@ def main():
     # clustering_method = args.clustering_method
     use_val_group = args.use_val_group
     grass_distance_type = args.grass_distance_type
+    ignored_domain = args.ignored_domain if args.ignored_domain >=0 else None
 
     if method in ['grad_george', 'input_dbscan']:
         if method == 'grad_george':
@@ -3038,6 +3047,7 @@ def main():
             clustering_method,
             use_val_group,
             grass_distance_type,
+            ignored_domain,
         )
 
 if __name__ == '__main__':

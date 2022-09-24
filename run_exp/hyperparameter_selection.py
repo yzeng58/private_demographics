@@ -61,7 +61,10 @@ def main(args):
 
     elif dataset == 'toy':
         cores = '2+1'
-        start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.001_outlier_0_model_mlp_best.model' % root_dir
+        if outlier:
+            start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.001_outlier_1_model_mlp_best.model' % root_dir
+        else:
+            start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.001_outlier_0_model_mlp_best.model' % root_dir
         queue = 'x86_1h'
         task = 'fairness'
 
@@ -127,6 +130,10 @@ def main(args):
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
         }
+        if outlier:
+            param_grid['eiil'][' --lr_ei '] = 0.01
+            param_grid['george'][' --overcluster_factor '] = 10 # selected
+            param_grid['grad_george'][' --overcluster_factor '] = 1 # selected
 
     elif dataset == 'waterbirds':
         queue = 'x86_24h'

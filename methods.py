@@ -323,7 +323,6 @@ def collect_representations(
     outlier,
 ):
     folder_name = results_dir(root_dir, dataset_name, outlier)
-
     try:
         with open(os.path.join(folder_name, 'inputs.npy'), 'rb') as f:
             inputs = np.load(f)
@@ -2333,13 +2332,13 @@ def run_exp(
                     if outlier:
                         if use_val_group:
                             clustering_path = [
-                                '%s/george_grass_y_0_min_samples_100_eps_0.55.npy' % (folder_name),
-                                '%s/george_grass_y_1_min_samples_100_eps_0.55.npy' % (folder_name),
+                                '%s/george_grass_y_0_min_samples_50_eps_0.30.npy' % (folder_name),
+                                '%s/george_grass_y_1_min_samples_100_eps_0.40.npy' % (folder_name),
                             ]
                         else:
                             clustering_path = [
-                                '%s/george_grass_y_0_min_samples_60_eps_0.35.npy' % (folder_name),
-                                '%s/george_grass_y_1_min_samples_60_eps_0.40.npy' % (folder_name),
+                                '%s/george_grass_y_0_min_samples_60_eps_0.25.npy' % (folder_name),
+                                '%s/george_grass_y_1_min_samples_50_eps_0.25.npy' % (folder_name),
                             ]
                     else:
                         if use_val_group:
@@ -2599,10 +2598,21 @@ def inference(
     epoch = 0,
     selected_epoch = 0,
     domain_loader = None,
+    ignored_domain = None,
 ):
     loss, worst_acc, avg_acc, fair_loss = torch.tensor(0.).to(device), torch.tensor(0.).to(device), torch.tensor(0.).to(device), torch.tensor(0.).to(device)
     if mode == 'test': m = best_m
     reweighted_avg_acc = torch.tensor(0., device = device)
+
+    considered_groups = list(range(num_group))
+    ignored_groups = []
+    for g in range(num_group):
+        a, y = domain_class_idx(g, num_domain)
+        if a == ignored_domain:
+            ignored_groups.append(g)
+    for g in ignored_groups:
+        considered_groups.remove(g)
+    num_valid_groups = len(considered_groups)
 
     m.eval()
     domain_acc = torch.zeros(num_group, device = device)
@@ -2714,14 +2724,14 @@ def inference(
     print_acc       = '|    accuracy    |'
     print_loss      = '|      loss      |'
 
-    for g in range(num_group):
+    for g in considered_groups:
         print_header += ' group %d|' % g
         print_acc    += '%s%.2f%% |' % (' '*(3-len(str(round(domain_acc[g].item()*100)))), domain_acc[g] * 100)
         print_loss   += ' %s%.2f |' % (' '*(3-len(str(round(domain_loss[g].item())))), domain_loss[g])
     print(print_header)
     print(print_acc)
     print(print_loss)
-    print('------------------' + '---------' * (num_group))
+    print('------------------' + '---------' * (num_valid_groups))
 
 
     print('| Accuracy Loss: %.4f' % loss)

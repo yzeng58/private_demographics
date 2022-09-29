@@ -268,6 +268,13 @@ def main(args):
                 ' --epoch_ei ': 3, # selected
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
+            'input_dbscan': {
+                ' --epoch ': 3,
+                ' --batch_size ': 32,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
         }
         
         if method == 'eiil': require_a100 = True

@@ -2388,6 +2388,17 @@ def run_exp(
                             '%s/george_grass_y_0_min_samples_100_eps_0.10.npy' % (folder_name),
                             '%s/george_grass_y_1_min_samples_50_eps_0.25.npy' % (folder_name),  
                         ]
+                elif dataset_name == 'civilcomments':
+                    if use_val_group:
+                        clustering_path = [
+                            '%s/george_grass_y_0_min_samples_100_eps_0.50.npy' % (folder_name),
+                            '%s/george_grass_y_1_min_samples_100_eps_0.35.npy' % (folder_name),
+                        ]
+                    else:
+                        clustering_path = [
+                            '%s/george_grass_y_0_min_samples_100_eps_0.50.npy' % (folder_name),
+                            '%s/george_grass_y_1_min_samples_50_eps_0.35.npy' % (folder_name),     
+                        ]
 
         domain_loader  = get_domain_grass_george_mix(
             clustering_path,

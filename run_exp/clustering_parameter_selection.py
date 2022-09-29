@@ -57,6 +57,12 @@ def main(args):
             'george': {
                 ' --overcluster_factor ': [1, 2, 5, 10],
                 ' --batch_size ': 32,
+            },
+            'input_dbscan': {
+                ' --clustering_y ': list(range(num_class)),
+                ' --batch_size ': 32,
+                ' --clustering_eps ': [0.35, 0.5, 0.7],
+                ' --clustering_min_samples ': [50, 100]
             }
         }
 

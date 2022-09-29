@@ -14,10 +14,10 @@ def get_outlier_transforms(blur=True, colorjitter=True, posterize=True, flip_pct
 def generate_outliers(
     dataset_name = 'waterbirds',
 ): # only works for waterbirds for now
-    root_dir = '%s/balanceGroups/data' % root_dir
+    path_dir = '%s/balanceGroups/data' % root_dir
     if dataset_name == 'waterbirds':
         data_dir = '%s/balanceGroups/data/waterbirds/waterbird_complete95_forest2water2' % root_dir
-    out_dir = os.path.join(root_dir, dataset_name, 'outliers')        
+    out_dir = os.path.join(path_dir, dataset_name, 'outliers')        
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
 
@@ -73,6 +73,51 @@ def generate_outliers(
     metadata_df["group_labels"] = new_labels
     metadata_df["y"] = y_c
     metadata_df.to_csv(os.path.join(out_dir, "metadata.csv"), index=False)
+
+# def generate_outliers(
+#     dataset_name = 'waterbirds',
+# ): # only works for waterbirds for now
+#     path_dir = '%s/balanceGroups/data' % root_dir
+#     if dataset_name == 'waterbirds':
+#         data_dir = '%s/balanceGroups/data/waterbirds/waterbird_complete95_forest2water2' % root_dir
+#     out_dir = os.path.join(path_dir, dataset_name, 'outliers')     
+
+#     transf = get_outlier_transforms()
+#     transf.extend([None for i in range(100 - len(transf))])
+
+#     metadata_df = pd.read_csv(os.path.join(data_dir, "metadata.csv"))
+
+#     new_labels = []
+#     y_c = metadata_df['y'].values
+#     g_c = metadata_df['place'].values
+#     names_c = metadata_df['img_filename'].values
+#     splits = metadata_df['split']
+
+#     for i in range(len(metadata_df.index)):
+#         if y_c[i] == 0:
+#             if g_c[i] == 0:
+#                 new_labels.append(0)
+#             else:
+#                 new_labels.append(1)
+#         else:
+#             if g_c[i] == 0:
+#                 new_labels.append(2)
+#             else:
+#                 new_labels.append(3)
+
+#     for j, image_name in enumerate(names_c):
+#         subdir = image_name.split("/")[0]
+#         sub_path = os.path.join(out_dir, subdir)
+#         input_path = os.path.join(data_dir, image_name)
+#         new_img = None
+
+#         # if not part of test set
+#         if splits[j] != 2:
+#             t_n = random.randint(0, len(transf) - 1)
+#             t = transf[t_n]
+
+#             if t:
+#                 print("Applying transform", t, "to file", image_name)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -1168,6 +1168,8 @@ def get_domain_grass_george_mix(
             pred_dict['train'] = pred_domain[idx_mode == 'train'].tolist()
             pred_dict['val']   = pred_domain[idx_mode == 'val'].tolist()
             pred_dict['ars']   = ARS(true_group, pred_domain)
+            if len(data.shape) >= 3:
+                data = data.reshape(data.shape[0], data.shape[1]*data.shape[2])
             pred_dict['ss']    = float(silhouette_score(data, pred_domain))
             pred_dict['num_group'] = num_group
 

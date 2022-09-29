@@ -424,7 +424,7 @@ def grass_clustering(
         center = grad_y.mean(axis=0)
         grad_y = grad_y - center
         if len(grad_y.shape)>=3:
-            grad_y.reshape(grad_y.shape[0], grad_y.shape[1]*grad_y.shape[2])
+            grad_y = grad_y.reshape(grad_y.shape[0], grad_y.shape[1]*grad_y.shape[2])
         grad_y = normalize(grad_y)
 
     true_domain_y = true_domain[idx_class == y]

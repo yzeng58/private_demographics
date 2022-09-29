@@ -1161,3 +1161,131 @@ def vis_3d_tsne_interactive(
     # Render the plot.
     plotly.offline.iplot(plot_figure)
 
+
+def dbscan_results(
+    true_domain,
+    num_class,
+    idx_class,
+    true_group,
+    grad, 
+    process_grad=0, 
+    use_val_group=0,
+    eps_iter = None,
+    min_samples_iter = None,
+):
+
+    pred_domain = np.zeros(true_domain.shape)
+    num_group = 0
+    if eps_iter is None:
+        eps_iter = np.linspace(0.1, 0.7, 13)
+    if min_samples_iter is None:
+        min_samples_iter = [5, 10, 20, 30, 40, 50, 60, 100]
+
+    for y in range(num_class):
+        idx_y = idx_class == y
+        grad_y = grad[idx_class == y]
+        if process_grad:
+            center = grad_y.mean(axis=0)
+            grad_y = grad_y - center
+            grad_y = normalize(grad_y)
+
+        best_ars = -np.inf
+        best_ss = -np.inf
+        
+
+        for eps in eps_iter:
+            for min_samples in min_samples_iter:
+
+                dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine') # , metric='cosine'
+                dbscan.fit(grad_y)
+                
+                
+                ars = ARS(true_domain[idx_y], dbscan.labels_)
+                try:
+                    ss = silhouette_score(grad_y, dbscan.labels_)
+                except: 
+                    ss = -1
+
+                update_pred_domain = False
+                if use_val_group:
+                    if ars > best_ars:
+                        update_pred_domain = True
+
+                else:
+                    if ss > best_ss:
+                        update_pred_domain = True
+
+                if update_pred_domain:
+                    best_ars = ars
+                    best_ss = ss
+
+                    idx = idx_class == y
+                    idx[idx] = dbscan.labels_ >= 0
+                    pred_domain[idx] = dbscan.labels_[dbscan.labels_ >= 0] + num_group
+                    # detect the outliers
+                    idx = idx_class == y
+                    idx[idx] = dbscan.labels_ < 0
+                    pred_domain[idx] = -1
+                    
+                    best_params = {'eps': eps, 'min_samples': min_samples}
+        print(ars, ss)
+
+        num_group = len(np.unique(pred_domain)) - int(-1 in pred_domain)
+        print("Number of group: %d" % num_group)
+        print("Best parameter: ", best_params)
+
+    ars_score = ARS(true_group, pred_domain)
+    try:
+        ss = silhouette_score(grad, pred_domain)
+    except:
+        ss = -1
+    print("ARS: ", ars_score)
+    print("SS: ", ss)
+    return pred_domain, num_group
+
+def kmeans_results(
+    inputs, 
+    true_domain,
+    num_class,
+    idx_class,
+    true_group,
+    use_val_group = 1,
+    k_iter = None,
+):
+    pred_domain = np.zeros(true_domain.shape)
+    num_group = 0
+    if k_iter is None:
+        k_iter = range(2,10,2)
+
+    for y in range(2):
+        idx_y = idx_class == y
+        inputs_y = inputs[idx_y]
+        best_ss, best_ars = -np.inf, -np.inf
+        
+        for n_clusters in k_iter:
+            kmeans = KMeans(n_clusters = n_clusters, random_state = 0).fit(inputs_y)
+            ars = ARS(true_domain[idx_y], kmeans.labels_)
+            ss = silhouette_score(inputs_y, kmeans.labels_)
+            update = False
+
+            if use_val_group:
+                if ars > best_ars:
+                    update = True
+
+            else:
+                if ss > best_ss:
+                    update = True
+
+            if update:
+                best_ars = ars
+                best_ss = ss
+                pred_domain[idx_y] = kmeans.labels_ + num_group
+
+        num_group = len(np.unique(pred_domain)) - int(-1 in pred_domain)
+        print("Number of group: %d" % num_group)
+
+    ars = ARS(true_group, pred_domain)
+    ss = silhouette_score(inputs, pred_domain)
+    print("ARS: ", ars)
+    print("SS: ", ss)
+    return pred_domain, num_group

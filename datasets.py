@@ -46,14 +46,13 @@ def toyData(train_val_test = (0.6,0.2,0.2), seed = 123, var = 0.001, outlier = 1
     if outlier: # randomly flip the labels
         outlier_index = split_df['train'].sample(frac = .05, random_state = 2*seed).index.tolist()
         split_df['train'].loc[outlier_index, 'y'] = 1 - split_df['train'].loc[outlier_index].y
-        split_df['train'].loc[outlier_index, 'a'] = 2
+        split_df['train'].loc[outlier_index, 'a'] = np.random.choice([0,1], len(outlier_index))
     
     for mode in ['train', 'val', 'test']:
         file_name = '%s/privateDemographics/data/toy/%s_outlier_%d.csv' % (root_dir, mode, outlier)
         split_df[mode].to_csv(file_name, index = False)
             
     return split_df
-
 
 def dataGen(
     n_list = np.ones(3) * 100,

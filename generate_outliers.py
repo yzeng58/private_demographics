@@ -14,9 +14,9 @@ def get_outlier_transforms(blur=True, colorjitter=True, posterize=True, flip_pct
 def generate_outliers(
     dataset_name = 'waterbirds',
 ): # only works for waterbirds for now
-    root_dir = '/dccstor/storage/balanceGroups/data'
+    root_dir = '%s/balanceGroups/data' % root_dir
     if dataset_name == 'waterbirds':
-        data_dir = '/dccstor/storage/balanceGroups/data/waterbirds/waterbird_complete95_forest2water2'
+        data_dir = '%s/balanceGroups/data/waterbirds/waterbird_complete95_forest2water2' % root_dir
     out_dir = os.path.join(root_dir, dataset_name, 'outliers')        
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)

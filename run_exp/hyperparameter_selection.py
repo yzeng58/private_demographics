@@ -222,6 +222,7 @@ def main(args):
         cores = '4+1'
         start_model_path = '%s/privateDemographics/models/civilcomments/sgd_m_1_num_epoch_10_batch_size_32_lr_1e-05_optimizer_adam_subsample_0_weight_decay_0.01_best.model'  % root_dir
         mem = '32g'
+        require_a100 = True
 
         param_grid = {
             'erm': {
@@ -277,7 +278,6 @@ def main(args):
             },
         }
         
-        if method == 'eiil': require_a100 = True
 
     elif dataset == 'multinli':
         queue = 'x86_24h'

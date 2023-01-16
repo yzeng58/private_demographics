@@ -30,6 +30,7 @@ figures/
 **/log_ccc
 **/results
 **/data
+**/trials
 
 **/submit.sh
 submit.sh

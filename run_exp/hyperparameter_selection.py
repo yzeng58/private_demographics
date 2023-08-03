@@ -8,7 +8,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='privateDemographics')
     parser.add_argument("-a", "--algorithm", default = 'erm', type = str, choices = algs)
     parser.add_argument('-d', '--dataset', default = 'synthetic', type = str, choices = datasets)
-    parser.add_argument('--wandb_group_name', default = '', type = str)
+    parser.add_argument('--wandb_group_name', default = 'test', type = str)
     parser.add_argument('--outlier', default = 0, type = int, choices = [0,1])
     parser.add_argument('--process_grad', default = 1, type = int, choices = [0,1])
     parser.add_argument('--run', default = 1, type = int, choices = [0,1])
@@ -130,6 +130,13 @@ def main(args):
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
+            'jtt': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --up_weight ': [2, 5 ,10]
+            }
         }
         if outlier:
             param_grid['eiil'][' --lr_ei '] = 0.01
@@ -278,7 +285,6 @@ def main(args):
             },
         }
         
-
     elif dataset == 'multinli':
         queue = 'x86_24h'
         task = 'fairness'

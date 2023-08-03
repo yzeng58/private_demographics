@@ -9,6 +9,7 @@ algs = [
     'george',
     'grad_george',
     'input_dbscan',
+    'jtt',
 ]
 
 clustering_algs = [

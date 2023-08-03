@@ -1,6 +1,6 @@
 from curses.ascii import isdigit
 from tqdm import tqdm
-import torch, os, random, argparse, wandb, time, sys, umap
+import torch, os, random, argparse, wandb, time, sys, umap, copy
 from utils import *
 import numpy as np
 from sklearn.decomposition import PCA
@@ -125,7 +125,7 @@ def exp_init(
         seed = seed,
     )
 
-    if start_model_path and method in ['grass', 'eiil', 'cvar_doro', 'george', 'grass_george_mix']:
+    if start_model_path and method in ['grass', 'eiil', 'cvar_doro', 'george', 'grass_george_mix', 'jtt', 'erm']:
         try: 
             m.load_state_dict(torch.load(start_model_path))
         except RuntimeError: 
@@ -180,10 +180,10 @@ def remove_outliers(features, labels, domains, pred_domain):
 
 def get_pred_domain(domain_loader, mode):
     try:
-        _, pred_domain = domain_loader['%s_iter' % mode].next()
+        _, pred_domain = next(domain_loader['%s_iter' % mode])
     except StopIteration:
         domain_loader['%s_iter' % mode] = iter(domain_loader[mode])
-        _, pred_domain = domain_loader['%s_iter' % mode].next()
+        _, pred_domain = next(domain_loader['%s_iter' % mode])
     return pred_domain
 
 def collect_gradient(
@@ -336,20 +336,25 @@ def collect_representations(
             idx_mode = np.load(f)
         with open(os.path.join(folder_name, 'loss.npy'), 'rb') as f:
             losses = np.load(f)
+        with open(os.path.join(folder_name, 'pred_class.npy'), 'rb') as f:
+            print(os.path.join(folder_name, 'pred_class.npy'))
+            pred_class = np.load(f)
         print('Loaded all the input information into folder %s...' % folder_name)
     except:
-        inputs, true_domain, idx_mode, idx_class, losses = [], [], [], [], []
+        inputs, true_domain, idx_mode, idx_class, losses, pred_class = [], [], [], [], [], []
         for mode in ['train', 'val']:
             for batch_idx, features, labels, domains in tqdm(loader[mode], total = len(loader[mode]), desc = 'Loading Representation for %s set' % mode):
                 features, labels, domains = features.to(device), labels.to(device), domains.to(device)
                 outputs = m(features)
                 if len(outputs) == 2: _, outputs = outputs
+                _, preds = torch.max(outputs, 1)
                 loss = F.cross_entropy(outputs, labels, reduction = 'none')
                 losses.extend(list(map(lambda x: x.item(), loss)))
                 inputs.append(features)
                 true_domain.append(domains)
                 idx_class.append(labels)
                 idx_mode.extend([mode] * len(batch_idx))
+                pred_class.extend(preds)
 
         inputs = np.array(torch.cat(inputs).cpu())
         true_domain = np.array(torch.cat(true_domain).cpu())
@@ -357,11 +362,14 @@ def collect_representations(
         true_group = group_idx(true_domain, idx_class, num_domain)
         idx_mode = np.array(idx_mode)
         losses = np.array(losses)
+        pred_class = np.array(pred_class)
 
         with open('%s/inputs.npy' % folder_name, 'wb') as f:
             np.save(f, inputs)
         with open('%s/loss.npy' % folder_name, 'wb') as f:
             np.save(f, losses)
+        with open('%s/pred_class.npy' % folder_name, 'wb') as f:
+            np.save(f, pred_class)
         with open(os.path.join(folder_name, 'true_domain.npy'), 'wb') as f:
             np.save(f, true_domain)
         with open(os.path.join(folder_name, 'idx_class.npy'), 'wb') as f:
@@ -371,7 +379,7 @@ def collect_representations(
         with open(os.path.join(folder_name, 'idx_mode.npy'), 'wb') as f:
             np.save(f, idx_mode)
 
-    return inputs, true_domain, idx_class, true_group, idx_mode, losses
+    return inputs, true_domain, idx_class, true_group, idx_mode, losses, pred_class
 
 def grass_clustering(
     grad,
@@ -982,7 +990,7 @@ def george_clustering(
         wandb.finish()
 
     return ss, ars_score, pred_domain, pred_dict
-    
+
 def get_domain_george(
     m,
     loader,
@@ -1013,7 +1021,7 @@ def get_domain_george(
         with open(file_name, 'r') as f:
             pred_dict = json.load(f)
     else:
-        inputs, true_domain, idx_class, true_group, idx_mode, losses = collect_representations(
+        inputs, true_domain, idx_class, true_group, idx_mode, losses, _ = collect_representations(
             dataset_name,
             loader,
             device,
@@ -1132,7 +1140,7 @@ def get_domain_grass_george_mix(
             outlier,
         )
         
-        inputs, true_domain, idx_class, true_group, idx_mode, losses = collect_representations(
+        inputs, true_domain, idx_class, true_group, idx_mode, losses, _ = collect_representations(
             dataset_name,
             loader,
             device,
@@ -1213,6 +1221,131 @@ def get_domain_grass_george_mix(
     print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
 
     return {
+        'train': DataLoader(
+            DomainLoader(pred_dict['train']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'val': DataLoader(
+            DomainLoader(pred_dict['val']),
+            batch_size = batch_size,
+            shuffle = False,
+        ),
+        'num_group': pred_dict['num_group'],
+        'n': {
+            'train': torch.tensor(pred_dict['n_train'], device = device),
+            'val': torch.tensor(pred_dict['n_val'], device = device),
+        },
+    }
+
+def jtt_clustering(
+    log_wandb,
+    dataset_name, 
+    outlier,
+    true_domain, 
+    idx_class,
+    num_domain,
+    pred_class,
+    idx_mode,
+    num_class,
+):
+    if log_wandb:
+        try:
+            wandb.init(
+                project = 'privateDemographics',
+                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
+                job_type = 'jtt'
+            )
+        except:
+            import wandb
+            wandb.init(
+                project = 'privateDemographics',
+                group = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier),
+                job_type = 'jtt'
+            )
+            
+    # compare predictions with actual labels
+    misclassified = (idx_class != pred_class).astype(int)
+    pred_domain = copy.deepcopy(misclassified)
+    for y in range(num_class):
+        idx_y = idx_class == y
+        pred_domain[idx_y] = misclassified[idx_y] + 2*y
+            
+    true_group = group_idx(true_domain, idx_class, num_domain)
+    ars_score = ARS(true_group, pred_domain)
+    
+    pred_dict = {}
+    pred_dict['num_group'] = len(np.unique(pred_domain))
+    for mode in ['train', 'val']:
+        pred_dict[mode] = pred_domain[idx_mode == mode]
+        pred_dict['n_%s' % mode] = []
+        for g in range(pred_dict['num_group']):
+            group = pred_dict[mode] == g
+            pred_dict['n_%s' % mode].append(int(group.sum()))
+        pred_dict[mode] = pred_dict[mode].tolist()
+    pred_dict['ars'] = ars_score
+    
+    if log_wandb:
+        group_stat = np.unique(pred_domain, return_counts = True)
+        wandb_log_dict = {
+            'ars': ars_score,
+            'max_proportion': group_stat[1].max()/group_stat[1].sum(),
+            'min_proportion': group_stat[1].min()/group_stat[1].sum(),
+            'num_subgroups': group_stat[0].shape[0],
+        }
+        wandb.log(wandb_log_dict)
+        wandb.finish()
+
+    return pred_dict
+    
+
+def get_domain_jtt(
+    m,
+    loader,
+    dataset_name, 
+    outlier,
+    load_pred_dict,
+    device,
+    num_domain,
+    num_class,
+    log_wandb,
+    batch_size, 
+):
+    m = deepcopy(m)
+    folder_name = results_dir(root_dir, dataset_name, outlier)
+    file_name = os.path.join(folder_name, 'jtt_pred_dict.json')
+    
+    if os.path.isfile(file_name) and load_pred_dict:
+        print('Loading estimated domains from %s' % file_name)
+        with open(file_name, 'r') as f:
+            pred_dict = json.load(f)
+    else:
+        inputs, true_domain, idx_class, true_group, idx_mode, losses, pred_class = collect_representations(
+            dataset_name,
+            loader,
+            device,
+            m,
+            num_domain,
+            outlier,
+        )
+        print(idx_class)
+        print(pred_class)
+        
+        pred_dict = jtt_clustering(
+            log_wandb,
+            dataset_name, 
+            outlier,
+            true_domain,
+            idx_class,
+            num_domain,
+            pred_class,
+            idx_mode,
+            num_class,     
+        )
+        
+    print('Adjusted Rand Score of Group Prediction: %.4f!' % pred_dict['ars'])
+    
+    return  {
         'train': DataLoader(
             DomainLoader(pred_dict['train']),
             batch_size = batch_size,
@@ -1370,10 +1503,10 @@ def gradient_descent(
 
     if mode in ['standard']:
         loss = F.cross_entropy(output, labels, reduction = 'sum')
-    elif mode in ['grass', 'robust_dro', 'george', 'grass_george_mix']:
+    elif mode in ['grass', 'robust_dro', 'george', 'grass_george_mix', 'jtt']:
         loss_g = torch.zeros(num_group, device = device)
         for g in range(num_group):
-            if task == 'irm' or mode in ['grass', 'george', 'grass_george_mix']:
+            if task == 'irm' or mode in ['grass', 'george', 'grass_george_mix', 'jtt']:
                 group = domains == g
             elif task == 'fairness':
                 a, y = domain_class_idx(g, num_domain)
@@ -1446,7 +1579,7 @@ def run_epoch(
     m.train()
     tqdm_object = tqdm(loader['train'], total=len(loader['train']), desc=f"Epoch: {epoch + 1}")
 
-    if method == 'erm':
+    if method in ['erm']:
         for _, features, labels, domains in tqdm_object:
             results = gradient_descent(
                 model,
@@ -1574,6 +1707,29 @@ def run_epoch(
                 q,
                 lr_scheduler,
                 outlier_frac,
+            )
+    elif method == 'jtt':
+        for _, features, labels, domains in tqdm_object:
+            pred_domain = get_pred_domain(domain_loader, 'train')
+            results = gradient_descent(
+                model,
+                features,
+                labels,
+                domains,
+                m,
+                optim,
+                device,
+                num_domain,
+                num_group,
+                task,
+                lr_q,
+                None,
+                False,
+                None,
+                'jtt',
+                q, 
+                lr_scheduler,
+                None,
             )
 
 def pred_groups_grass(
@@ -1791,7 +1947,7 @@ def pred_groups_george(
         model,
     )
 
-    inputs, true_domain, idx_class, true_group, idx_mode, losses = collect_representations(
+    inputs, true_domain, idx_class, true_group, idx_mode, losses, _ = collect_representations(
         dataset_name,
         loader,
         device,
@@ -1907,7 +2063,7 @@ def pred_groups_grass_george_mix(
         outlier,
     )
 
-    inputs, true_domain, idx_class, true_group, idx_mode, losses = collect_representations(
+    inputs, true_domain, idx_class, true_group, idx_mode, losses, _ = collect_representations(
         dataset_name,
         loader,
         device,
@@ -1978,6 +2134,76 @@ def pred_groups_grass_george_mix(
             '%s_%s' % (collect_representation, clustering_method),
         )
 
+def pred_groups_jtt(
+    dataset_name, 
+    outlier,
+    batch_size,
+    target_var,
+    domain,
+    num_workers,
+    pin_memory,
+    task,
+    load_representations,
+    start_model_path, 
+    seed,
+    log_wandb,
+):
+    folder_name = results_dir(root_dir, dataset_name, outlier)
+    file_name = os.path.join(folder_name, 'jtt_pred_dict_outlier_%d.json' % (outlier))
+
+    [
+        m,
+        loader,
+        optim,
+        model,
+        num_domain,
+        num_group,
+        lr_scheduler,
+        device,
+        n,
+        num_feature,
+        num_class,
+    ] = exp_init(
+        dataset_name,
+        batch_size,
+        target_var,
+        domain,
+        num_workers,
+        pin_memory,
+        task,
+        outlier,
+        load_representations,
+        start_model_path,
+        seed,
+        'george',
+        device,
+        1e-3,
+        1e-5,
+        model,
+    )
+    
+    inputs, true_domain, idx_class, true_group, idx_mode, losses, pred_class = collect_representations(
+        dataset_name,
+        loader,
+        device,
+        m,
+        num_domain,
+        outlier,
+    )
+
+    jtt_clustering(
+        log_wandb,
+        dataset_name, 
+        outlier,
+        true_domain, 
+        idx_class,
+        num_domain,
+        pred_class,
+        idx_mode,
+        num_class,
+    )
+    
+    
 
 def run_exp(
     method, 
@@ -2024,6 +2250,7 @@ def run_exp(
     use_val_group = False,
     grass_distance_type = 'cosine',
     ignored_domain = None,
+    up_weight = 5,
 ):
 
     (   
@@ -2110,6 +2337,12 @@ def run_exp(
             'lr': lr,
             'type': '%s_%s' % (collect_representation, clustering_method),
             'use_val_group': use_val_group,
+        },
+        'jtt': {
+            'num_epoch': num_epoch,
+            'batch_size': batch_size,
+            'lr': lr,
+            'up_weight': up_weight,
         }
     }
 
@@ -2436,6 +2669,23 @@ def run_exp(
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
         q = torch.ones(domain_loader['num_group'], device = device)
+    elif method == 'jtt':
+        domain_loader = get_domain_jtt(
+            m,
+            loader,
+            dataset_name, 
+            outlier,
+            load_pred_dict,
+            device,
+            num_domain,
+            num_class,
+            log_wandb,
+            batch_size, 
+        )
+        domain_loader['train_iter'] = iter(domain_loader['train'])
+        domain_loader['val_iter'] = iter(domain_loader['val'])
+        q = torch.ones(domain_loader['num_group'], device = device)
+        q[np.arange(domain_loader['num_group']) % 2 == 1] = up_weight
     else:
         q = torch.ones(num_group, device = device)
 
@@ -2641,7 +2891,7 @@ def inference(
     domain_loss = torch.zeros(num_group, device = device)
 
     if mode in ['train', 'val'] and domain_loader:
-        if method in ['grass', 'george', 'grass_george_mix']:
+        if method in ['grass', 'george', 'grass_george_mix', 'jtt']:
             pred_num_group = domain_loader['num_group'] 
         elif method == 'eiil':
             pred_num_group = domain_loader['num_domain'] * num_class
@@ -2672,7 +2922,7 @@ def inference(
         avg_acc += torch.sum(bool_correct).item()
 
         if mode in ['train', 'val'] and domain_loader:
-            if method in ['grass', 'george', 'grass_george_mix']:
+            if method in ['grass', 'george', 'grass_george_mix', 'jtt']:
                 for g in range(pred_num_group):
                     group = pred_domains == g
 
@@ -2845,6 +3095,7 @@ def parse_args():
     parser.add_argument('--use_val_group', default = 1, type = int, choices = [0,1])
     parser.add_argument('--grass_distance_type', default = 'cosine', type = str, choices = ['cosine', 'euclidean'])
     parser.add_argument('--ignored_domain', default = -1, type = int)
+    parser.add_argument('--up_weight', default = 1, type = int)
 
     args = parser.parse_args()
 
@@ -2899,6 +3150,7 @@ def main():
     use_val_group = args.use_val_group
     grass_distance_type = args.grass_distance_type
     ignored_domain = args.ignored_domain if args.ignored_domain >=0 else None
+    up_weight = args.up_weight
 
     if method in ['grad_george', 'input_dbscan']:
         if method == 'grad_george':
@@ -2936,6 +3188,22 @@ def main():
                 clustering_path_use,
                 grass_distance_type,
             )
+        elif method == 'jtt':
+            pred_groups_jtt(
+                dataset_name, 
+                outlier,
+                batch_size,
+                target_var,
+                domain,
+                num_workers,
+                pin_memory,
+                task,
+                load_representations,
+                start_model_path, 
+                seed,
+                log_wandb,
+            )
+            
         elif method == 'george':
             pred_groups_george(
                 dataset_name,
@@ -3063,6 +3331,7 @@ def main():
             use_val_group,
             grass_distance_type,
             ignored_domain,
+            up_weight,
         )
 
 if __name__ == '__main__':

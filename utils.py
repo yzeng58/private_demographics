@@ -30,6 +30,13 @@ from sklearn.manifold import TSNE
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 #########################################################
+
+def check_mkdir(folder):
+    CHECK_FOLDER = os.path.isdir(folder)
+
+    # If folder doesn't exist, then create it.
+    if not CHECK_FOLDER:
+        os.makedirs(folder)
     
 def logit_compute(probas):
     return torch.log(probas/(1-probas))
@@ -77,16 +84,16 @@ def irm_penalty(logits, labels, device = 'cpu'):
     
 def save_results(data_json, dataset_name, alg, best_model):
     folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
-    if not os.path.isdir(folder_name):
-        os.mkdir(folder_name)
+    check_mkdir(folder_name)
+    
     file_name = os.path.join(folder_name, '%s.json' % alg)
     with open(file_name, 'w') as f:
         json.dump(data_json, f)
         print('Results saved in %s!' % file_name)
 
     model_folder_name = '%s/privateDemographics/models/%s' % (root_dir, dataset_name)
-    if not os.path.isdir(model_folder_name):
-        os.mkdir(model_folder_name)
+    check_mkdir(model_folder_name)
+    
     model_file_name = os.path.join(model_folder_name, '%s_best.model' % (alg))
     if os.path.isfile(model_file_name):
         os.remove(model_file_name)
@@ -1113,6 +1120,7 @@ def vis_3d_tsne_interactive(
         folder_name = '%s/privateDemographics/results/%s/outliers' % (root_dir, dataset)
     else:
         folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset)
+    check_mkdir(folder_name)
 
     grad_tsne = {}
     file_name = '%s/%s_tsne_dim_%d.npy' % (folder_name, vis_representation, n_components)

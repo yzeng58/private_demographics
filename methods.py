@@ -30,24 +30,6 @@ def results_dir(root_dir, dataset_name, outlier):
         folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     return folder_name
 
-def check_mkdir(folder):
-    CHECK_FOLDER = os.path.isdir(folder)
-
-    # If folder doesn't exist, then create it.
-    if not CHECK_FOLDER:
-        os.makedirs(folder)
-    '''
-    if not os.path.isdir(folder):
-        print(os.sep)
-        if folder.endswith(os.sep):
-            head = os.sep.join(folder.split(os.sep)[:-2])
-        else:
-            head = os.sep.join(folder.split(os.sep)[:-1])
-        print(head)
-        check_mkdir(head)
-        os.mkdir(folder)
-    '''
-
 def exp_init(
     dataset_name,
     batch_size,
@@ -442,6 +424,7 @@ def grass_clustering(
             )
 
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
     if file_name is None:
         file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
             y, min_samples, eps,
@@ -526,6 +509,7 @@ def get_domain_grass(
 ):
     m = deepcopy(m)
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'pred_dict_outlier_%s_val_%d.json' % (outlier, use_val_group))
 
     if load_pred_dict: 
@@ -834,6 +818,7 @@ def get_domain_eiil(
 ):
     m = deepcopy(m)
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d_val_%d.json' % (outlier, lr_ei, epoch_ei, use_val_group))
 
     if os.path.isfile(file_name) and load_pred_dict:
@@ -1035,6 +1020,7 @@ def get_domain_george(
 ):
     m = deepcopy(m)
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s_val_%d.json' % (outlier, overcluster_factor, use_val_group))
 
     if os.path.isfile(file_name) and load_pred_dict:
@@ -1130,6 +1116,7 @@ def get_domain_grass_george_mix(
     use_val_group = 1,
 ):  
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d_val_%d.json' % (
         collect_representation, 
         clustering_method,
@@ -1335,6 +1322,7 @@ def get_domain_jtt(
 ):
     m = deepcopy(m)
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'jtt_pred_dict.json')
     
     if os.path.isfile(file_name) and load_pred_dict:
@@ -1859,6 +1847,7 @@ def pred_groups_eiil(
 ):
 
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d_val_%d.json' % (outlier, lr_ei, epoch_ei, use_val_group))
 
     [
@@ -1934,6 +1923,7 @@ def pred_groups_george(
 ):
 
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s_val_%d.json' % (outlier, overcluster_factor, use_val_group))
 
     [
@@ -2036,6 +2026,7 @@ def pred_groups_grass_george_mix(
     use_val_group,
 ):
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
 
     [
         m,
@@ -2169,6 +2160,7 @@ def pred_groups_jtt(
     log_wandb,
 ):
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'jtt_pred_dict_outlier_%d.json' % (outlier))
 
     [
@@ -2418,6 +2410,7 @@ def run_exp(
     data_json = defaultdict(list)
     clustering_path = None
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
     if method == 'grass':
         if clustering_path_use:
             if best_clustering_parameter: 

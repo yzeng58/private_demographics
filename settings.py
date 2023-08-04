@@ -33,6 +33,7 @@ models = [
     'logreg',
     'bert_last_layer',
     'default',
+    'resnet18',
 ]
 
 datasets = [
@@ -43,6 +44,7 @@ datasets = [
     'cmnist',
     'compas',
     'toy',
+    'celeba',
 ]
 
 optimizers = [

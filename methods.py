@@ -66,7 +66,7 @@ def exp_init(
         val_path = '%s/privateDemographics/data/toy/%s_outlier_%d.csv' % (root_dir, 'val', outlier)
         test_path = '%s/privateDemographics/data/toy/%s_outlier_%d.csv' % (root_dir, 'test', outlier)
 
-    elif dataset_name in ['waterbirds', 'civilcomments', 'multinli', 'compas']:
+    elif dataset_name in ['waterbirds', 'civilcomments', 'multinli', 'compas', 'celeba']:
         train_path = '%s/balanceGroups/data/%s' % (root_dir, dataset_name)
         val_path = None,
         test_path = None,
@@ -110,7 +110,7 @@ def exp_init(
             model = 'logreg'
             
     elif dataset_name == 'celeba':
-        if not model: model = 'resnet50'
+        if not model: model = 'resnet18'
 
     elif dataset_name in ['civilcomments', 'multinli']:
         if not model: model = 'bert'
@@ -1278,6 +1278,7 @@ def jtt_clustering(
     
     pred_dict = {}
     pred_dict['num_group'] = len(np.unique(pred_domain))
+
     for mode in ['train', 'val']:
         pred_dict[mode] = pred_domain[idx_mode == mode]
         pred_dict['n_%s' % mode] = []
@@ -1720,7 +1721,7 @@ def run_epoch(
                 optim,
                 device,
                 num_domain,
-                num_group,
+                domain_loader['num_group'],
                 task,
                 lr_q,
                 None,

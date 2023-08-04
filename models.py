@@ -9,6 +9,14 @@ def get_resnet50(n_classes, pretrained, seed = 123):
         p.requires_grad_(False)
     d = model.fc.in_features
     model.fc = nn.Linear(d, n_classes)
+    model = torch.nn.DataParallel(model)
+    return model
+
+def get_resnet18(n_classes, pretrained, seed = 123):
+    torch.manual_seed(seed)
+    model = torchvision.models.resnet18(pretrained=pretrained)
+    d = model.fc.in_features
+    model.fc = nn.Linear(d, n_classes)
     return model
 
 class BertWrapper(torch.nn.Module):
@@ -170,6 +178,8 @@ def load_model(
 ):
     if model == 'resnet50':
         model_list = get_resnet50(num_class, True, seed)
+    elif model == 'resnet18':
+        model_list = get_resnet18(num_class, True, seed)
     elif model == 'mlp':
         model_list = mlp(num_feature, num_class, seed)
     elif model == 'logreg':

@@ -222,6 +222,12 @@ def main(args):
                 ' --lr ': [1e-5, 1e-4, 1e-3],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
             },
+            'jtt': {
+                ' --epoch ': 360,
+                ' --batch_size ': 128,
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --up_weight ': [5,10,100],
+            }
         }
 
     elif dataset == 'civilcomments':

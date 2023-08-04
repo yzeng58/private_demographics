@@ -2263,6 +2263,7 @@ def run_exp(
     grass_distance_type = 'cosine',
     ignored_domain = None,
     up_weight = 5,
+    save_model = True,
 ):
 
     (   
@@ -2862,6 +2863,7 @@ def run_exp(
         dataset_name,
         setting_name,
         best_m,
+        save_model,
     )
     if log_wandb: wandb.finish()
 
@@ -3109,6 +3111,7 @@ def parse_args():
     parser.add_argument('--grass_distance_type', default = 'cosine', type = str, choices = ['cosine', 'euclidean'])
     parser.add_argument('--ignored_domain', default = -1, type = int)
     parser.add_argument('--up_weight', default = 1, type = int)
+    parser.add_argument('--save_model', default = 1, type = int, choices = [1,0])
 
     args = parser.parse_args()
 
@@ -3164,6 +3167,7 @@ def main():
     grass_distance_type = args.grass_distance_type
     ignored_domain = args.ignored_domain if args.ignored_domain >=0 else None
     up_weight = args.up_weight
+    save_model = args.save_model
 
     if method in ['grad_george', 'input_dbscan']:
         if method == 'grad_george':
@@ -3345,6 +3349,7 @@ def main():
             grass_distance_type,
             ignored_domain,
             up_weight,
+            save_model,
         )
 
 if __name__ == '__main__':

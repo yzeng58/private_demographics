@@ -9,7 +9,6 @@ def get_resnet50(n_classes, pretrained, seed = 123):
         p.requires_grad_(False)
     d = model.fc.in_features
     model.fc = nn.Linear(d, n_classes)
-    model = torch.nn.DataParallel(model)
     return model
 
 def get_resnet18(n_classes, pretrained, seed = 123):

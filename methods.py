@@ -30,6 +30,24 @@ def results_dir(root_dir, dataset_name, outlier):
         folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
     return folder_name
 
+def check_mkdir(folder):
+    CHECK_FOLDER = os.path.isdir(folder)
+
+    # If folder doesn't exist, then create it.
+    if not CHECK_FOLDER:
+        os.makedirs(folder)
+    '''
+    if not os.path.isdir(folder):
+        print(os.sep)
+        if folder.endswith(os.sep):
+            head = os.sep.join(folder.split(os.sep)[:-2])
+        else:
+            head = os.sep.join(folder.split(os.sep)[:-1])
+        print(head)
+        check_mkdir(head)
+        os.mkdir(folder)
+    '''
+
 def exp_init(
     dataset_name,
     batch_size,
@@ -235,9 +253,8 @@ def collect_gradient(
     --------------
     """
     folder_name = results_dir(root_dir, dataset_name, outlier)
-
-    if not os.path.isdir(folder_name):
-        os.mkdir(folder_name)
+    check_mkdir(folder_name)
+    
     try:
         with open(os.path.join(folder_name, 'grad.npy'), 'rb') as f:
             grad = np.load(f)
@@ -326,6 +343,8 @@ def collect_representations(
     outlier,
 ):
     folder_name = results_dir(root_dir, dataset_name, outlier)
+    check_mkdir(folder_name)
+    
     try:
         with open(os.path.join(folder_name, 'inputs.npy'), 'rb') as f:
             inputs = np.load(f)

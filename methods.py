@@ -108,15 +108,18 @@ def exp_init(
         
             num_feature = num_feature[0]
             model = 'logreg'
+            
+    elif dataset_name == 'celeba':
+        if not model: model = 'resnet50'
 
     elif dataset_name in ['civilcomments', 'multinli']:
         if not model: model = 'bert'
     
-    elif dataset_name in ['synthetic', 'compas']:
+    elif dataset_name in ['synthetic', 'compas', 'toy']:
         if not model: model = 'mlp'
 
-    elif dataset_name in ['toy']:
-        if not model: model = 'logreg'
+    # elif dataset_name in ['toy']:
+    #     if not model: model = 'logreg'
 
     m = load_model(
         model = model,
@@ -125,14 +128,14 @@ def exp_init(
         seed = seed,
     )
 
-    if start_model_path and method in ['grass', 'eiil', 'cvar_doro', 'george', 'grass_george_mix', 'jtt', 'erm']:
+    if start_model_path and method in ['grass', 'eiil', 'cvar_doro', 'george', 'grass_george_mix', 'jtt']:
         try: 
             m.load_state_dict(torch.load(start_model_path))
         except RuntimeError: 
             print("""
             Couldn't load the start_model_path. It might because of the following two reasons:
             1. Couldn't load CUDA devices, and the model stored in start_model_path requires CUDA devices;
-            2. The start_model_path doesn not fit the current model architecture. 
+            2. The start_model_path does not fit the current model architecture. 
             """)
 
     m.to(device)
@@ -337,7 +340,6 @@ def collect_representations(
         with open(os.path.join(folder_name, 'loss.npy'), 'rb') as f:
             losses = np.load(f)
         with open(os.path.join(folder_name, 'pred_class.npy'), 'rb') as f:
-            print(os.path.join(folder_name, 'pred_class.npy'))
             pred_class = np.load(f)
         print('Loaded all the input information into folder %s...' % folder_name)
     except:
@@ -1328,11 +1330,9 @@ def get_domain_jtt(
             num_domain,
             outlier,
         )
-        print(idx_class)
-        print(pred_class)
         
         pred_dict = jtt_clustering(
-            log_wandb,
+            False,
             dataset_name, 
             outlier,
             true_domain,

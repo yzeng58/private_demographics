@@ -14,6 +14,7 @@ def parse_args():
     parser.add_argument('--run', default = 1, type = int, choices = [0,1])
     parser.add_argument('--model', default = 'default', type = str, choices = models)
     parser.add_argument('--use_val_group', default = 1, type = int, choices = [0,1])
+    parser.add_argument('--device', default = 'cpu', type = str, choices = ['cuda', 'cpu'])
     args = parser.parse_args()
     return args
 
@@ -22,7 +23,7 @@ def main(args):
     dataset = args.dataset
     method = args.algorithm
     wandb_group_name = args.wandb_group_name
-    device = 'cuda'
+    device = args.device
     mem = '16g'
     outlier = args.outlier
     process_grad = args.process_grad

@@ -31,6 +31,7 @@ figures/
 **/results
 **/data
 **/trials
+**/submit
 
 **/submit.sh
 submit.sh

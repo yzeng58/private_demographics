@@ -357,7 +357,7 @@ def collect_representations(
                 true_domain.append(domains)
                 idx_class.append(labels)
                 idx_mode.extend([mode] * len(batch_idx))
-                pred_class.extend(preds)
+                pred_class.append(preds)
 
         inputs = np.array(torch.cat(inputs).cpu())
         true_domain = np.array(torch.cat(true_domain).cpu())
@@ -365,7 +365,7 @@ def collect_representations(
         true_group = group_idx(true_domain, idx_class, num_domain)
         idx_mode = np.array(idx_mode)
         losses = np.array(losses)
-        pred_class = np.array(pred_class.cpu())
+        pred_class = np.array(torch.cat(pred_class).cpu())
 
         with open('%s/inputs.npy' % folder_name, 'wb') as f:
             np.save(f, inputs)

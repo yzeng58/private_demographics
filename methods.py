@@ -365,7 +365,7 @@ def collect_representations(
         true_group = group_idx(true_domain, idx_class, num_domain)
         idx_mode = np.array(idx_mode)
         losses = np.array(losses)
-        pred_class = np.array(pred_class)
+        pred_class = np.array(pred_class.cpu())
 
         with open('%s/inputs.npy' % folder_name, 'wb') as f:
             np.save(f, inputs)

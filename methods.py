@@ -1206,6 +1206,7 @@ def get_domain_grass_george_mix(
             m,
             num_domain,
             outlier,
+            cluster_num,
         )
 
         if collect_representation == 'grass':
@@ -1389,6 +1390,7 @@ def get_domain_jtt(
             m,
             num_domain,
             outlier,
+            cluster_num,
         )
         
         pred_dict = jtt_clustering(
@@ -2028,6 +2030,7 @@ def pred_groups_george(
         m,
         num_domain,
         outlier,
+        cluster_num,
     )
 
     george_clustering(
@@ -2148,6 +2151,7 @@ def pred_groups_grass_george_mix(
         m,
         num_domain,
         outlier,
+        cluster_num,
     )
 
     if collect_representation == 'grass':
@@ -2273,6 +2277,7 @@ def pred_groups_jtt(
         m,
         num_domain,
         outlier,
+        cluster_num,
     )
 
     jtt_clustering(

@@ -82,8 +82,8 @@ def irm_penalty(logits, labels, device = 'cpu'):
     grad = autograd.grad(loss, [scale], create_graph=True)[0]
     return torch.sum(grad**2)
     
-def save_results(data_json, dataset_name, alg, best_model, save_model = True):
-    folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+def save_results(data_json, datafolder, alg, best_model, save_model = True):
+    folder_name = '%s/privateDemographics/results/%s' % (root_dir, datafolder)
     check_mkdir(folder_name)
     
     file_name = os.path.join(folder_name, '%s.json' % alg)
@@ -91,7 +91,7 @@ def save_results(data_json, dataset_name, alg, best_model, save_model = True):
         json.dump(data_json, f)
         print('Results saved in %s!' % file_name)
 
-    model_folder_name = '%s/privateDemographics/models/%s' % (root_dir, dataset_name)
+    model_folder_name = '%s/privateDemographics/models/%s' % (root_dir, datafolder)
     check_mkdir(model_folder_name)
     
     if save_model:

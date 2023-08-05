@@ -12,48 +12,6 @@ sys.path.insert(1, '%s/noHarmFairness/references/BalancingGroups/branches' % roo
 from clean_up.datasets import get_loaders
 from utils import group_idx
 
-def toyData(train_val_test = (0.6,0.2,0.2), seed = 123, var = 0.001, outlier = 1):
-    np.random.seed(seed)
-    X, Y, dfs, centers = {}, {}, {}, defaultdict(dict)
-    
-    centers[0][0] = [(0,5), (0,3), (0,2), (0,1)]
-    centers[0][1] = [(1,5), (1,3), (1,2), (1,1)]
-
-    centers[1][0] = [(1,4)]
-    centers[1][1] = [(0,4)]
-    
-    cluster_num = 100
-    for a in centers:
-        X[a], Y[a] = [], []
-        for y in centers[a]:
-            for center in centers[a][y]:
-                X[a].append(np.random.multivariate_normal(center, np.eye(2)*var, cluster_num))
-                Y[a].append(np.ones(cluster_num) * y)
-        X[a], Y[a] = np.concatenate(X[a]), np.concatenate(Y[a])
-        dfs[a] = pd.DataFrame(X[a], columns = ['x1', 'x2'])
-        dfs[a]['y'] = Y[a]
-        dfs[a]['a'] = a
-        
-    data_df = pd.concat([dfs[a] for a in centers], ignore_index = True).sample(frac = 1, random_state = seed).reset_index(drop = True)
-    
-    split_df = {}
-    frac_train, frac_val, frac_test = train_val_test
-    n_tot = len(data_df)
-    n_train, n_val = int(frac_train*n_tot), int(frac_val*n_tot)
-    n_test = n_tot - n_train - n_val
-    split_df['train'], split_df['val'], split_df['test'] = data_df.iloc[:n_train], data_df.iloc[n_train: (n_train + n_val)], data_df.iloc[(n_train + n_val):], 
-    
-    if outlier: # randomly flip the labels
-        outlier_index = split_df['train'].sample(frac = .05, random_state = 2*seed).index.tolist()
-        split_df['train'].loc[outlier_index, 'y'] = 1 - split_df['train'].loc[outlier_index].y
-        split_df['train'].loc[outlier_index, 'a'] = np.random.choice([0,1], len(outlier_index))
-    
-    for mode in ['train', 'val', 'test']:
-        file_name = '%s/privateDemographics/data/toy/%s_outlier_%d.csv' % (root_dir, mode, outlier)
-        split_df[mode].to_csv(file_name, index = False)
-            
-    return split_df
-
 def dataGen(
     n_list = np.ones(3) * 100,
     seed = 123, 
@@ -223,6 +181,47 @@ def df_tabular_data(
         df['train_supp'] = train.copy()
     return df
 
+def toy_gen(train_val_test = (0.6,0.2,0.2), seed = 123, var = 0.001, outlier = 1, cluster_num = (100, 100)):
+    np.random.seed(seed)
+    X, Y, dfs, centers = {}, {}, {}, defaultdict(dict)
+    
+    centers[0][0] = [(0,5), (0,3), (0,2), (0,1)]
+    centers[0][1] = [(1,5), (1,3), (1,2), (1,1)]
+
+    centers[1][0] = [(1,4)]
+    centers[1][1] = [(0,4)]
+    
+    for a in centers:
+        X[a], Y[a] = [], []
+        for y in centers[a]:
+            for center in centers[a][y]:
+                X[a].append(np.random.multivariate_normal(center, np.eye(2)*var, cluster_num[a]))
+                Y[a].append(np.ones(cluster_num[a]) * y)
+        X[a], Y[a] = np.concatenate(X[a]), np.concatenate(Y[a])
+        dfs[a] = pd.DataFrame(X[a], columns = ['x1', 'x2'])
+        dfs[a]['y'] = Y[a]
+        dfs[a]['a'] = a
+        
+    data_df = pd.concat([dfs[a] for a in centers], ignore_index = True).sample(frac = 1, random_state = seed).reset_index(drop = True)
+    
+    split_df = {}
+    frac_train, frac_val, frac_test = train_val_test
+    n_tot = len(data_df)
+    n_train, n_val = int(frac_train*n_tot), int(frac_val*n_tot)
+    n_test = n_tot - n_train - n_val
+    split_df['train'], split_df['val'], split_df['test'] = data_df.iloc[:n_train], data_df.iloc[n_train: (n_train + n_val)], data_df.iloc[(n_train + n_val):], 
+    
+    if outlier: # randomly flip the labels
+        outlier_index = split_df['train'].sample(frac = .05, random_state = 2*seed).index.tolist()
+        split_df['train'].loc[outlier_index, 'y'] = 1 - split_df['train'].loc[outlier_index].y
+        split_df['train'].loc[outlier_index, 'a'] = np.random.choice([0,1], len(outlier_index))
+    
+    for mode in ['train', 'val', 'test']:
+        file_name = '%s/privateDemographics/data/toy/%s_outlier_%d_cluster_num_%d_%d.csv' % (root_dir, mode, outlier, cluster_num[0], cluster_num[1])
+        split_df[mode].to_csv(file_name, index = False)
+            
+    return split_df
+
 def preprocess_compas(df: pd.DataFrame):
     """Preprocess dataset"""
 
@@ -268,11 +267,12 @@ def read_data(
     pin_memory = False,
     seed = 123,
     outlier = False,
+    cluster_num = (100,100),
 ):
     np.random.seed(seed)
     random.seed(seed)
     torch.manual_seed(seed)
-    if dataset_name in ['synthetic', 'compas', 'toy']:
+    if dataset_name in ['synthetic', 'compas', 'toy', 'varied_toy']:
         if dataset_name in ['synthetic', 'toy']:
             df = df_tabular_data(
                 train_path,
@@ -280,6 +280,14 @@ def read_data(
                 test_path,
                 train_supp_frac
             )
+        elif dataset_name == 'varied_toy':
+            df = toy_gen(cluster_num = cluster_num)
+            if train_supp_frac:
+                n_supp = int(len(df['train']) * train_supp_frac)
+                df['train_supp'] = df['train'].iloc[:n_supp]
+                df['train'] = df['train'].iloc[n_supp:]
+            else:
+                df['train_supp'] = df['train'].copy()
         elif dataset_name == 'compas':
             compas = preprocess_compas(pd.read_csv(
                 '%s/compas-scores-two-years.csv' % train_path

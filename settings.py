@@ -45,6 +45,7 @@ datasets = [
     'compas',
     'toy',
     'celeba',
+    'varied_toy',
 ]
 
 optimizers = [

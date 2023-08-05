@@ -23,11 +23,16 @@ from torch.autograd import grad
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 #########################################################
 
-def results_dir(root_dir, dataset_name, outlier):
-    if outlier:
-        folder_name = '%s/privateDemographics/results/%s/outliers' % (root_dir, dataset_name)
+def results_dir(root_dir, dataset_name, outlier, cluster_num):
+    if dataset_name == 'varied_toy': 
+        datafolder = f'varied_toy/cluster_{cluster_num[0]}_{cluster_num[1]}'
     else:
-        folder_name = '%s/privateDemographics/results/%s' % (root_dir, dataset_name)
+        datafolder = dataset_name
+        
+    if outlier:
+        folder_name = '%s/privateDemographics/results/%s/outliers' % (root_dir, datafolder)
+    else:
+        folder_name = '%s/privateDemographics/results/%s' % (root_dir, datafolder)
     return folder_name
 
 def exp_init(
@@ -47,6 +52,7 @@ def exp_init(
     lr,
     weight_decay,
     model,
+    cluster_num,
 ):
     np.random.seed(seed)
     random.seed(seed)
@@ -70,6 +76,8 @@ def exp_init(
         train_path = '%s/balanceGroups/data/%s' % (root_dir, dataset_name)
         val_path = None,
         test_path = None,
+    elif dataset_name == 'varied_toy':
+        train_path, val_path, test_path = None, None, None
 
     device = torch.device(device)
     loader, n, num_domain, num_class, num_feature = read_data(
@@ -87,6 +95,7 @@ def exp_init(
         pin_memory,
         seed,
         outlier,
+        cluster_num,
     )
 
     if task == 'fairness':
@@ -115,7 +124,7 @@ def exp_init(
     elif dataset_name in ['civilcomments', 'multinli']:
         if not model: model = 'bert'
     
-    elif dataset_name in ['synthetic', 'compas', 'toy']:
+    elif dataset_name in ['synthetic', 'compas', 'toy', 'varied_toy']:
         if not model: model = 'mlp'
 
     # elif dataset_name in ['toy']:
@@ -202,6 +211,7 @@ def collect_gradient(
     dataset_name,
     num_class,
     outlier,
+    cluster_num,
 ):
     """
     This function will return 
@@ -234,7 +244,7 @@ def collect_gradient(
     num_class: the number of class
     --------------
     """
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     
     try:
@@ -323,8 +333,9 @@ def collect_representations(
     m,
     num_domain,
     outlier,
+    cluster_num,
 ):
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     
     try:
@@ -400,6 +411,7 @@ def grass_clustering(
     file_name = None,
     wandb_group_name = None,
     job_type = None,
+    cluster_num = (100, 100),
 ):      
     if log_wandb:
         if wandb_group_name is None:
@@ -423,7 +435,7 @@ def grass_clustering(
                 job_type = job_type,
             )
 
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     if file_name is None:
         file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
@@ -506,9 +518,10 @@ def get_domain_grass(
     process_grad,
     use_val_group,
     grass_distance_type,
+    cluster_num,
 ):
     m = deepcopy(m)
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'pred_dict_outlier_%s_val_%d.json' % (outlier, use_val_group))
 
@@ -533,6 +546,7 @@ def get_domain_grass(
             dataset_name,
             num_class,
             outlier,
+            cluster_num,
         )
 
         pred_domain = np.zeros(true_domain.shape)
@@ -815,9 +829,10 @@ def get_domain_eiil(
     num_class,
     load_pred_dict,
     use_val_group,
+    cluster_num,
 ):
     m = deepcopy(m)
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d_val_%d.json' % (outlier, lr_ei, epoch_ei, use_val_group))
 
@@ -1017,9 +1032,10 @@ def get_domain_george(
     metric_types = 'mean_loss', # ['mean_loss', 'composition']
     load_pred_dict = True,
     use_val_group = 1,
+    cluster_num = (100, 100),
 ):
     m = deepcopy(m)
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s_val_%d.json' % (outlier, overcluster_factor, use_val_group))
 
@@ -1035,6 +1051,7 @@ def get_domain_george(
             m,
             num_domain,
             outlier,
+            cluster_num,
         )
 
         ars_score, ss, pred_domain, pred_dict = george_clustering(
@@ -1114,8 +1131,9 @@ def get_domain_grass_george_mix(
     seed = 123,
     batch_size = 128,
     use_val_group = 1,
+    cluster_num = (100, 100),
 ):  
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d_val_%d.json' % (
         collect_representation, 
@@ -1146,6 +1164,7 @@ def get_domain_grass_george_mix(
             dataset_name,
             num_class,
             outlier,
+            cluster_num,
         )
         
         inputs, true_domain, idx_class, true_group, idx_mode, losses, _ = collect_representations(
@@ -1319,9 +1338,10 @@ def get_domain_jtt(
     num_class,
     log_wandb,
     batch_size, 
+    cluster_num,
 ):
     m = deepcopy(m)
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'jtt_pred_dict.json')
     
@@ -1761,6 +1781,7 @@ def pred_groups_grass(
     model = None,
     clustering_path_use = False,
     grass_distance_type = 'cosine',
+    cluster_num = (100,100),
 ):
     [
         m,
@@ -1791,6 +1812,7 @@ def pred_groups_grass(
         1e-3,
         1e-5,
         model,
+        cluster_num,
     )
 
     grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
@@ -1806,6 +1828,7 @@ def pred_groups_grass(
         dataset_name,
         num_class,
         outlier,
+        cluster_num,
     )
 
     grass_clustering(
@@ -1824,6 +1847,7 @@ def pred_groups_grass(
         None,
         None,
         None,
+        cluster_num,
     )
 
 def pred_groups_eiil(
@@ -1844,9 +1868,10 @@ def pred_groups_eiil(
     device,
     model,
     use_val_group,
+    cluster_num,
 ):
 
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'ei_pred_dict_outlier_%s_lr_%s_epoch_%d_val_%d.json' % (outlier, lr_ei, epoch_ei, use_val_group))
 
@@ -1879,6 +1904,7 @@ def pred_groups_eiil(
         1e-3,
         1e-5,
         model,
+        cluster_num,
     )
 
     eiil_clustering(
@@ -1920,9 +1946,10 @@ def pred_groups_george(
     model,
     log_wandb,
     use_val_group,
+    cluster_num,
 ):
 
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'george_pred_dict_outlier_%s_ocf_%s_val_%d.json' % (outlier, overcluster_factor, use_val_group))
 
@@ -1955,6 +1982,7 @@ def pred_groups_george(
         1e-3,
         1e-5,
         model,
+        cluster_num,
     )
 
     inputs, true_domain, idx_class, true_group, idx_mode, losses, _ = collect_representations(
@@ -2024,8 +2052,9 @@ def pred_groups_grass_george_mix(
     device,
     model,
     use_val_group,
+    cluster_num,
 ):
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
 
     [
@@ -2057,6 +2086,7 @@ def pred_groups_grass_george_mix(
         1e-3,
         1e-5,
         model,
+        cluster_num,
     )
 
     grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
@@ -2072,6 +2102,7 @@ def pred_groups_grass_george_mix(
         dataset_name,
         num_class,
         outlier,
+        cluster_num,
     )
 
     inputs, true_domain, idx_class, true_group, idx_mode, losses, _ = collect_representations(
@@ -2158,8 +2189,9 @@ def pred_groups_jtt(
     start_model_path, 
     seed,
     log_wandb,
+    cluster_num,
 ):
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'jtt_pred_dict_outlier_%d.json' % (outlier))
 
@@ -2192,6 +2224,7 @@ def pred_groups_jtt(
         1e-3,
         1e-5,
         model,
+        cluster_num,
     )
     
     inputs, true_domain, idx_class, true_group, idx_mode, losses, pred_class = collect_representations(
@@ -2264,6 +2297,7 @@ def run_exp(
     ignored_domain = None,
     up_weight = 5,
     save_model = True,
+    cluster_num = (100, 100),
 ):
 
     (   
@@ -2295,6 +2329,7 @@ def run_exp(
         lr,
         weight_decay,
         model,
+        cluster_num,
     )
 
     domain_loader = None
@@ -2410,7 +2445,7 @@ def run_exp(
 
     data_json = defaultdict(list)
     clustering_path = None
-    folder_name = results_dir(root_dir, dataset_name, outlier)
+    folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     if method == 'grass':
         if clustering_path_use:
@@ -2528,6 +2563,7 @@ def run_exp(
             process_grad,
             use_val_group,
             grass_distance_type,
+            cluster_num,
         )
 
         domain_loader['train_iter'] = iter(domain_loader['train'])
@@ -2548,6 +2584,7 @@ def run_exp(
             num_class,
             load_pred_dict,
             use_val_group,
+            cluster_num,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
@@ -2679,6 +2716,7 @@ def run_exp(
             seed,
             batch_size,
             use_val_group,
+            cluster_num,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
@@ -2695,6 +2733,7 @@ def run_exp(
             num_class,
             log_wandb,
             batch_size, 
+            cluster_num,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
@@ -2858,9 +2897,14 @@ def run_exp(
     for param in params[method]:
         setting_name += '_%s_%s' % (param, params[method][param])
 
+    if dataset_name == 'varied_toy': 
+        datafolder = f'varied_toy/cluster_{cluster_num[0]}_{cluster_num[1]}'
+    else:
+        datafolder = dataset_name
+        
     save_results(
         data_json,
-        dataset_name,
+        datafolder,
         setting_name,
         best_m,
         save_model,
@@ -3112,6 +3156,8 @@ def parse_args():
     parser.add_argument('--ignored_domain', default = -1, type = int)
     parser.add_argument('--up_weight', default = 1, type = int)
     parser.add_argument('--save_model', default = 1, type = int, choices = [1,0])
+    parser.add_argument('--toy_num_maj', default = 100, type = int)
+    parser.add_argument('--toy_num_min', default = 100, type = int)
 
     args = parser.parse_args()
 
@@ -3168,6 +3214,7 @@ def main():
     ignored_domain = args.ignored_domain if args.ignored_domain >=0 else None
     up_weight = args.up_weight
     save_model = args.save_model
+    cluster_num = (args.toy_num_maj, args.toy_num_min)
 
     if method in ['grad_george', 'input_dbscan']:
         if method == 'grad_george':
@@ -3204,6 +3251,7 @@ def main():
                 model,
                 clustering_path_use,
                 grass_distance_type,
+                cluster_num,
             )
         elif method == 'jtt':
             pred_groups_jtt(
@@ -3219,6 +3267,7 @@ def main():
                 start_model_path, 
                 seed,
                 log_wandb,
+                cluster_num,
             )
             
         elif method == 'george':
@@ -3246,6 +3295,7 @@ def main():
                 model,
                 log_wandb,
                 use_val_group,
+                cluster_num,
             )
         elif method == 'eiil':
             pred_groups_eiil(
@@ -3266,6 +3316,7 @@ def main():
                 device,
                 model,
                 use_val_group,
+                cluster_num,
             )
         elif method == 'grass_george_mix': 
             pred_groups_grass_george_mix(
@@ -3300,6 +3351,7 @@ def main():
                 device,
                 model,
                 use_val_group,
+                cluster_num,
             )
 
     else:
@@ -3350,6 +3402,7 @@ def main():
             ignored_domain,
             up_weight,
             save_model,
+            cluster_num,
         )
 
 if __name__ == '__main__':

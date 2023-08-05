@@ -15,6 +15,8 @@ def parse_args():
     parser.add_argument('--model', default = 'default', type = str, choices = models)
     parser.add_argument('--use_val_group', default = 1, type = int, choices = [0,1])
     parser.add_argument('--device', default = 'cpu', type = str, choices = ['cuda', 'cpu'])
+    parser.add_argument('--toy_num_maj', default = 100, type = int)
+    parser.add_argument('--toy_num_min', default = 100, type = int)
     args = parser.parse_args()
     return args
 
@@ -61,7 +63,7 @@ def main(args):
             },
         }
 
-    elif dataset == 'toy':
+    elif dataset in ['toy']:
         cores = '2+1'
         if outlier:
             start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.001_outlier_1_model_mlp_best.model' % root_dir
@@ -76,6 +78,87 @@ def main(args):
                 ' --batch_size ': 128,
                 ' --lr ': [1e-4, 1e-3, 1e-2],
                 ' --weight_decay ': [1e-4, 1e-3, 1e-2,],
+            },
+            'grass': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-4, 1e-3, 1e-2],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2,],
+            },
+            'robust_dro': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-4, 1e-3, 1e-2],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2,],
+            },
+            'eiil': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --lr_ei ': 0.1, # selected
+                ' --epoch_ei ': 50,
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+            'cvar_doro': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --outlier_frac ': [0.005, 0.01, 0.02, 0.1, 0.2],
+                ' --minimal_group_frac ': [0.1, 0.2, 0.5],
+                ' --lr ': [1e-5, 1e-4],
+                ' --weight_decay ': [1e-1, 1],
+            },
+            'george': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --overcluster_factor ': 10 # selected
+            },
+            'grad_george': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --overcluster_factor ': 1 # selected
+            },
+            'input_dbscan': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+            },
+            'jtt': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr ': [1e-5, 1e-4, 1e-3],
+                ' --weight_decay ': [1e-4, 1e-3, 1e-2, 1e-1, 1],
+                ' --up_weight ': [5,10,100],
+            }
+        }
+        if outlier:
+            param_grid['eiil'][' --lr_ei '] = 0.01
+            param_grid['george'][' --overcluster_factor '] = 10 # selected
+            param_grid['grad_george'][' --overcluster_factor '] = 1 # selected
+            ignored_domain = 2
+
+    elif dataset in ['varied_toy']:
+        cores = '2+1'
+        if outlier: start_model_path = 'none'
+        queue = 'x86_1h'
+        task = 'fairness'
+
+        param_grid = {
+            'erm': {
+                ' --epoch ': 50,
+                ' --batch_size ': 128,
+                ' --lr ': 1e-2,
+                ' --weight_decay ': 1e-3,
             },
             'grass': {
                 ' --epoch ': 50,
@@ -436,7 +519,9 @@ def main(args):
         ' --process_grad ' + str(process_grad) +\
         ' --model ' + model +\
         ' --use_val_group ' + str(use_val_group) +\
-        ' --ignored_domain ' + str(ignored_domain)
+        ' --ignored_domain ' + str(ignored_domain) +\
+        ' --toy_num_maj ' + str(args.toy_num_maj) +\
+        ' --toy_num_min ' + str(args.toy_num_min)
 
     cmd_list = [cmd_pre]
     

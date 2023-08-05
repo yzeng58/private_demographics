@@ -333,6 +333,10 @@ def get_gradient(m, model):
     if model == 'bert':
         for p in m.model.classifier.parameters():
             diff.append(p.grad.data.reshape(-1))
+    elif model == 'resnet18':
+        # Assuming the last layer in ResNet-18 is named 'fc'
+        diff.append(m.model.fc.weight.grad.data.reshape(-1))
+        diff.append(m.model.fc.bias.grad.data.reshape(-1))
     else:
         parameters = get_parameters(m, model)
         for p in parameters:

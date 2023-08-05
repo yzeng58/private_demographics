@@ -412,6 +412,8 @@ def grass_clustering(
     wandb_group_name = None,
     job_type = None,
     cluster_num = (100, 100),
+    grass_clustering_method = 'dbscan',
+    kmeans_k = 2,
 ):      
     if log_wandb:
         if wandb_group_name is None:
@@ -437,10 +439,16 @@ def grass_clustering(
 
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
+    
     if file_name is None:
-        file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
-            y, min_samples, eps,
-        ))
+        if grass_clustering_method == 'dbscan':
+            file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
+                y, min_samples, eps,
+            ))
+        elif grass_clustering_method == 'kmeans':
+            file_name = os.path.join(folder_name, 'clustering_y_%d_kmeans_%d.npy' % (
+                y, kmeans_k,
+            ))
 
     grad_y = grad[idx_class == y]
     print("idx_class counts:", np.unique(idx_class, return_counts=True))
@@ -454,26 +462,32 @@ def grass_clustering(
     true_domain_y = true_domain[idx_class == y]
 
     if clustering_path_use:
-        dbscan_labels = np.load(file_name)
+        pred_labels = np.load(file_name)
     else:
-        print('Running DBSCAN...')
-        dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric=grass_distance_type)
-        dbscan.fit(grad_y)
+        if grass_clustering_method == 'dbscan':
+            print('Running DBSCAN...')
+            dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric=grass_distance_type)
+            dbscan.fit(grad_y)
+            pred_labels = dbscan.labels_
+        elif grass_clustering_method == 'kmeans':
+            print('Running kmeans...')
+            from sklearn.cluster import KMeans
+            kmeans = KMeans(n_clusters=kmeans_k, random_state=0).fit(grad_y)
+            pred_labels = kmeans.labels_
 
-        dbscan_labels = dbscan.labels_
 
-    ars = ARS(true_domain_y, dbscan_labels)
-    nmi = NMI(true_domain_y, dbscan_labels)
-    iou, iou2, eq = iou_adaptive(true_domain_y, dbscan_labels)
+    ars = ARS(true_domain_y, pred_labels)
+    nmi = NMI(true_domain_y, pred_labels)
+    iou, iou2, eq = iou_adaptive(true_domain_y, pred_labels)
     try:
-        ss = silhouette_score(grad_y, dbscan_labels)
+        ss = silhouette_score(grad_y, pred_labels)
     except:
         ss = -1
 
     val = sum(iou) + sum(iou2) + iou[1] + iou2[0] + (iou[2] +iou2[2])/2
     val /= 9
     if eq: print("Weighted avg", val)
-    pred_domain_y = dbscan_labels
+    pred_domain_y = pred_labels
 
     if os.path.isfile(file_name):
         os.remove(file_name)
@@ -497,7 +511,7 @@ def grass_clustering(
         }
         wandb.log(wandb_log_dict)
         wandb.finish()
-    return ars, nmi, val, iou, iou2, eq, ss, dbscan_labels
+    return ars, nmi, val, iou, iou2, eq, ss, pred_labels
 
 def get_domain_grass(
     m,
@@ -519,11 +533,12 @@ def get_domain_grass(
     use_val_group,
     grass_distance_type,
     cluster_num,
+    grass_clustering_method,
 ):
     m = deepcopy(m)
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
-    file_name = os.path.join(folder_name, 'pred_dict_outlier_%s_val_%d.json' % (outlier, use_val_group))
+    file_name = os.path.join(folder_name, 'pred_dict_%s_outlier_%s_val_%d.json' % (grass_clustering_method, outlier, use_val_group))
 
     if load_pred_dict: 
         with open(file_name, 'r') as f:
@@ -555,14 +570,14 @@ def get_domain_grass(
         if clustering_path:
             for y in range(num_class):
                 with open(clustering_path[y], 'rb') as f:
-                    dbscan_labels = np.load(f)
+                    pred_labels = np.load(f)
 
                 idx = idx_class == y
-                idx[idx] = dbscan_labels >= 0
-                pred_domain[idx] = dbscan_labels[dbscan_labels >= 0] + num_group
+                idx[idx] = pred_labels >= 0
+                pred_domain[idx] = pred_labels[pred_labels >= 0] + num_group
 
                 idx = idx_class == y
-                idx[idx] = dbscan_labels < 0
+                idx[idx] = pred_labels < 0
                 pred_domain[idx] = -1
                 num_group = len(np.unique(pred_domain)) - int(-1 in pred_domain)
 
@@ -581,73 +596,90 @@ def get_domain_grass(
 
                 true_domain_y = true_domain[idx_class == y]
 
-                for eps in np.linspace(0.1, 0.7, 13):
-                    for min_samples in [5, 10, 20, 30, 40, 50, 60, 100]:
+                if grass_clustering_method == 'dbscan':
+                    loop_obj = [(eps, min_samples) for eps in np.linspace(0.1, 0.7, 13) for min_samples in [5, 10, 20, 30, 40, 50, 60, 100]]
+                    kmeans_k = None
+                elif grass_clustering_method == 'kmeans':
+                    loop_obj = [kmeans_k for kmeans_k in [1, 2, 3, 4]]
+                    eps, min_samples = None, None
 
-                        ars, nmi, val, iou, iou2, eq, ss, dbscan_labels = grass_clustering(
-                            grad,
-                            dataset_name,
-                            eps,
-                            min_samples,
-                            y,
-                            False,
-                            outlier,
-                            process_grad,
-                            idx_class,
-                            true_domain,
-                            False,
-                            grass_distance_type,
-                            None,
-                            None,
-                            None,
-                        )
+                for loop_item in loop_obj:
+                    if grass_clustering_method == 'dbscan':
+                        eps, min_samples = loop_item
+                    elif grass_clustering_method == 'kmeans':
+                        kmeans_k = loop_item
+                        
+                    ars, nmi, val, iou, iou2, eq, ss, pred_labels = grass_clustering(
+                        grad,
+                        dataset_name,
+                        eps,
+                        min_samples,
+                        y,
+                        False,
+                        outlier,
+                        process_grad,
+                        idx_class,
+                        true_domain,
+                        False,
+                        grass_distance_type,
+                        None,
+                        None,
+                        None,
+                        cluster_num,
+                        grass_clustering_method,
+                        kmeans_k,
+                    )
 
-                        print('Eps', eps, 'Min samples', min_samples)
-                        print('Cluster counts', np.unique(dbscan_labels, return_counts=True))
-                
-                        arss.append(ars)
-                        nmis.append(nmi)
-                        sss.append(ss)
+                    print('Eps', eps, 'Min samples', min_samples)
+                    print('Cluster counts', np.unique(pred_labels, return_counts=True))
+            
+                    arss.append(ars)
+                    nmis.append(nmi)
+                    sss.append(ss)
 
-                        print('ARS', ars, 'NMI', nmi, 'Silhouette Score', ss)
-                
-                        update_pred_domain = False
-                        if use_val_group:
-                            ious.append(iou)
-                            ious2.append(iou2)
+                    print('ARS', ars, 'NMI', nmi, 'Silhouette Score', ss)
+            
+                    update_pred_domain = False
+                    if use_val_group:
+                        ious.append(iou)
+                        ious2.append(iou2)
 
-                            if eq:
-                                print("Weighted avg", val)
-                                if val > best_mean:
-                                    update_pred_domain = True
-
-                        else:
-                            if ss > best_ss:
-                                best_ss = ss
+                        if eq:
+                            print("Weighted avg", val)
+                            if val > best_mean:
                                 update_pred_domain = True
-                                
-                        if update_pred_domain:
-                            best_mean = val
-                            best_dbscan_params['eps'] = eps
-                            best_dbscan_params['min_samples'] = min_samples
 
-                            idx = idx_class == y
-                            idx[idx] = dbscan_labels >= 0
-                            print('print the number of groups')
-                            print(np.unique(dbscan_labels))
-                            pred_domain[idx] = dbscan_labels[dbscan_labels >= 0] + num_group
-                            # detect the outliers
-                            idx = idx_class == y
-                            idx[idx] = dbscan_labels < 0
-                            pred_domain[idx] = -1
+                    else:
+                        if ss > best_ss:
+                            best_ss = ss
+                            update_pred_domain = True
                             
+                    if update_pred_domain:
+                        best_mean = val
+                        best_dbscan_params['eps'] = eps
+                        best_dbscan_params['min_samples'] = min_samples
 
+                        idx = idx_class == y
+                        idx[idx] = pred_labels >= 0
+                        print('print the number of groups')
+                        print(np.unique(pred_labels))
+                        pred_domain[idx] = pred_labels[pred_labels >= 0] + num_group
+                        # detect the outliers
+                        idx = idx_class == y
+                        idx[idx] = pred_labels < 0
+                        pred_domain[idx] = -1
+                        
+                    if grass_clustering_method == 'dbscan':
                         clustering_file_name = os.path.join(folder_name, 'clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (
                             y, min_samples, eps,
                         ))
-                        with open(clustering_file_name, 'wb') as f:
-                            np.save(f, dbscan_labels)
-                        print('\n')
+                    elif grass_clustering_method == 'kmeans':
+                        clustering_file_name = os.path.join(folder_name, 'clustering_y_%d_kmeans_%d.npy' % (
+                            y, kmeans_k,
+                        ))
+                    with open(clustering_file_name, 'wb') as f:
+                        np.save(f, pred_labels)
+                    print('\n')
 
                 num_group = len(np.unique(pred_domain)) - int(-1 in pred_domain)
                 print("Number of group: %d" % num_group)
@@ -1782,6 +1814,8 @@ def pred_groups_grass(
     clustering_path_use = False,
     grass_distance_type = 'cosine',
     cluster_num = (100,100),
+    grass_clustering_method = 'dbscan',
+    kmeans_k = 2,
 ):
     [
         m,
@@ -1848,6 +1882,8 @@ def pred_groups_grass(
         None,
         None,
         cluster_num,
+        grass_clustering_method,
+        kmeans_k,
     )
 
 def pred_groups_eiil(
@@ -2139,6 +2175,9 @@ def pred_groups_grass_george_mix(
             clustering_file_name,
             None,
             '%s_%s_y=%d' % (collect_representation, clustering_method, y),
+            cluster_num,
+            'dbscan',
+            None,
         )
     elif clustering_method == 'george':
         file_name = os.path.join(folder_name, 'mix_%s_%s_pred_dict_outlier_%s_ocf_%s_eps_%.2f_min_samples_%d_val_%d.json' % (
@@ -2298,6 +2337,7 @@ def run_exp(
     up_weight = 5,
     save_model = True,
     cluster_num = (100, 100),
+    grass_clustering_method = 'dbscan',
 ):
 
     (   
@@ -2564,6 +2604,7 @@ def run_exp(
             use_val_group,
             grass_distance_type,
             cluster_num,
+            grass_clustering_method,
         )
 
         domain_loader['train_iter'] = iter(domain_loader['train'])
@@ -3158,6 +3199,8 @@ def parse_args():
     parser.add_argument('--save_model', default = 1, type = int, choices = [1,0])
     parser.add_argument('--toy_num_maj', default = 100, type = int)
     parser.add_argument('--toy_num_min', default = 100, type = int)
+    parser.add_argument('--grass_clustering_method', default = 'dbscan', type = str, choices = ['kmeans', 'dbscan'])
+    parser.add_argument('--kmeans_k', default = 2, type = int, choices = [1,2,3,4])
 
     args = parser.parse_args()
 
@@ -3215,6 +3258,8 @@ def main():
     up_weight = args.up_weight
     save_model = args.save_model
     cluster_num = (args.toy_num_maj, args.toy_num_min)
+    grass_clustering_method = args.grass_clustering_method
+    kmeans_k = args.kmeans_k
 
     if method in ['grad_george', 'input_dbscan']:
         if method == 'grad_george':
@@ -3252,6 +3297,8 @@ def main():
                 clustering_path_use,
                 grass_distance_type,
                 cluster_num,
+                grass_clustering_method,
+                kmeans_k,
             )
         elif method == 'jtt':
             pred_groups_jtt(
@@ -3403,6 +3450,7 @@ def main():
             up_weight,
             save_model,
             cluster_num,
+            grass_clustering_method,
         )
 
 if __name__ == '__main__':

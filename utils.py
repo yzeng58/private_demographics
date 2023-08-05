@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import torch, os, json, itertools, warnings, logging, plotly
+import torch, os, json, itertools, warnings, logging, plotly, functools
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from distutils.spawn import find_executable

@@ -17,6 +17,7 @@ def parse_args():
     parser.add_argument('--device', default = 'cpu', type = str, choices = ['cuda', 'cpu'])
     parser.add_argument('--toy_num_maj', default = 100, type = int)
     parser.add_argument('--toy_num_min', default = 100, type = int)
+    parser.add_argument('--load_pred_dict', default = 1, type = int, choices = [0,1])
     args = parser.parse_args()
     return args
 
@@ -149,7 +150,11 @@ def main(args):
 
     elif dataset in ['varied_toy']:
         cores = '2+1'
-        if outlier: start_model_path = 'none'
+        if outlier: 
+            if model in ['default', 'mlp']:
+                start_model_path = f'{root_dir}/privateDemographics/models/varied_toy/cluster_{args.toy_num_maj}_{args.toy_num_min}/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.001_outlier_1_model_mlp_best.model'
+            elif model == 'logreg':
+                start_model_path = f'{root_dir}/privateDemographics/models/varied_toy/cluster_{args.toy_num_maj}_{args.toy_num_min}/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.001_outlier_1_model_logreg_best.model'
         queue = 'x86_1h'
         task = 'fairness'
 
@@ -521,7 +526,8 @@ def main(args):
         ' --use_val_group ' + str(use_val_group) +\
         ' --ignored_domain ' + str(ignored_domain) +\
         ' --toy_num_maj ' + str(args.toy_num_maj) +\
-        ' --toy_num_min ' + str(args.toy_num_min)
+        ' --toy_num_min ' + str(args.toy_num_min) +\
+        ' --load_pred_dict ' + str(args.load_pred_dict)
 
     cmd_list = [cmd_pre]
     

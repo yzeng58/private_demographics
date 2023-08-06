@@ -258,6 +258,11 @@ def collect_gradient(
             true_group = np.load(f)
         with open(os.path.join(folder_name, 'idx_mode.npy'), 'rb') as f:
             idx_mode = np.load(f)
+        with open(os.path.join(folder_name, 'loss.npy'), 'rb') as f:
+            losses = np.load(f)
+        with open(os.path.join(folder_name, 'pred_class.npy'), 'rb') as f:
+            pred_class = np.load(f)
+            
         print('Loaded all the gradient information into folder %s...' % folder_name)
     except:
         print('Computing the gradients...')
@@ -281,7 +286,7 @@ def collect_gradient(
             minimal_group_frac = None,
         )
     
-        grad, true_domain, idx_mode, idx_class = [], [], [], []
+        grad, true_domain, idx_mode, idx_class, losses, pred_class = [], [], [], [], [], []
         for mode in ['train', 'val']:
             for batch_idx, features, labels, domains in loader[mode]:
                 true_domain.append(domains.numpy())
@@ -295,8 +300,12 @@ def collect_gradient(
                         _, output = output
                     else:
                         _, output = output, output 
+                    _, pred = torch.max(output.reshape(1, output.shape[-1]), 1) # check this line
+                    pred_class.extend(pred)
 
                     loss = F.cross_entropy(output.reshape(1, output.shape[-1]), label.reshape(1), reduction = 'none')
+                    losses.append(loss.item())
+                    
                     optim.zero_grad()
                     loss.backward()
                     grad.append(get_gradient(m, model))
@@ -308,6 +317,8 @@ def collect_gradient(
         idx_class = np.concatenate(idx_class)
         true_group = group_idx(true_domain, idx_class, num_domain)
         idx_mode = np.array(idx_mode)
+        losses = np.array(losses)
+        pred_class = np.array(pred_class)
 
         if not os.path.isdir(folder_name):
             os.mkdir(folder_name)
@@ -322,9 +333,13 @@ def collect_gradient(
             np.save(f, true_group)
         with open(os.path.join(folder_name, 'idx_mode.npy'), 'wb') as f:
             np.save(f, idx_mode)
+        with open(os.path.join(folder_name, 'loss.npy'), 'wb') as f:
+            np.save(f, losses)  
+        with open(os.path.join(folder_name, 'pred_class.npy'), 'wb') as f:
+            np.save(f, pred_class)
         print('All the gradient information are saved in folder %s!' % folder_name)
 
-    return grad, true_domain, idx_class, true_group, idx_mode
+    return grad, true_domain, idx_class, true_group, idx_mode, losses, pred_class
 
 def collect_representations(
     dataset_name,

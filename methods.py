@@ -2132,7 +2132,7 @@ def pred_groups_grass_george_mix(
         cluster_num,
     )
 
-    if collect_representation == 'grad':
+    if collect_representation == 'grass':
         data, true_domain, idx_class, true_group, idx_mode = collect_gradient(
             model,
             m,
@@ -2159,6 +2159,9 @@ def pred_groups_grass_george_mix(
             outlier,
             cluster_num,
         )
+        
+    else:
+        raise ValueError(f'collect_representation must be either grass or george, not {collect_representation}!')
 
     if clustering_method == 'grass':
         clustering_file_name = os.path.join(folder_name, '%s_%s_y_%d_min_samples_%d_eps_%.2f.npy' % (
@@ -2219,6 +2222,8 @@ def pred_groups_grass_george_mix(
             None,
             '%s_%s' % (collect_representation, clustering_method),
         )
+    else:
+        raise ValueError(f'clustering_method must be either grass or george, not {clustering_method}!')
 
 def pred_groups_jtt(
     dataset_name, 

@@ -18,6 +18,7 @@ def parse_args():
     parser.add_argument('--toy_num_maj', default = 100, type = int)
     parser.add_argument('--toy_num_min', default = 100, type = int)
     parser.add_argument('--load_pred_dict', default = 1, type = int, choices = [0,1])
+    parser.add_argument('--grass_clustering_method', default = 'dbscan', type = str, choices = ['kmeans', 'dbscan'])
     args = parser.parse_args()
     return args
 
@@ -67,9 +68,9 @@ def main(args):
     elif dataset in ['toy']:
         cores = '2+1'
         if outlier:
-            start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.001_outlier_1_model_mlp_best.model' % root_dir
+            start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.001_outlier_1_model_%s_best.model' % (root_dir, model)
         else:
-            start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.001_outlier_0_model_mlp_best.model' % root_dir
+            start_model_path = '%s/privateDemographics/models/toy/erm_num_epoch_50_batch_size_128_lr_0.01_subsample_0_weight_decay_0.001_outlier_0_model_%s_best.model' % (root_dir, model)
         queue = 'x86_1h'
         task = 'fairness'
 
@@ -527,7 +528,8 @@ def main(args):
         ' --ignored_domain ' + str(ignored_domain) +\
         ' --toy_num_maj ' + str(args.toy_num_maj) +\
         ' --toy_num_min ' + str(args.toy_num_min) +\
-        ' --load_pred_dict ' + str(args.load_pred_dict)
+        ' --load_pred_dict ' + str(args.load_pred_dict) +\
+        ' --grass_clustering_method ' + str(args.grass_clustering_method)
 
     cmd_list = [cmd_pre]
     

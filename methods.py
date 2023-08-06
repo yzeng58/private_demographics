@@ -590,7 +590,7 @@ def get_domain_grass(
                     grad_y = normalize(grad_y)
 
                 clusterings, arss, nmis, ious, ious2, sss = [], [], [], [], [], []
-                best_dbscan_params = {}
+                best_clustering_params = {}
                 best_mean = -np.inf
                 best_ss = -1
 
@@ -630,8 +630,9 @@ def get_domain_grass(
                         kmeans_k,
                     )
 
-                    print('Eps', eps, 'Min samples', min_samples)
-                    print('Cluster counts', np.unique(pred_labels, return_counts=True))
+                    if grass_clustering_method == 'dbscan':
+                        print('Eps', eps, 'Min samples', min_samples)
+                        print('Cluster counts', np.unique(pred_labels, return_counts=True))
             
                     arss.append(ars)
                     nmis.append(nmi)
@@ -656,8 +657,11 @@ def get_domain_grass(
                             
                     if update_pred_domain:
                         best_mean = val
-                        best_dbscan_params['eps'] = eps
-                        best_dbscan_params['min_samples'] = min_samples
+                        if grass_clustering_method == 'dbscan':
+                            best_clustering_params['eps'] = eps
+                            best_clustering_params['min_samples'] = min_samples
+                        elif grass_clustering_method == 'kmeans':
+                            best_clustering_params['kmeans_k'] = kmeans_k
 
                         idx = idx_class == y
                         idx[idx] = pred_labels >= 0
@@ -685,7 +689,7 @@ def get_domain_grass(
                 print("Number of group: %d" % num_group)
         
                 print(50 *'-')
-                print("y = %d: best avg IOU params" % y, best_dbscan_params)
+                print("y = %d: best avg IOU params" % y, best_clustering_params)
 
         ars_score = ARS(true_group, pred_domain)
         try:
@@ -2392,6 +2396,7 @@ def run_exp(
             'lr_q': lr_q,
             'lr': lr,
             'use_val_group': use_val_group,
+            'grass_clustering_method': grass_clustering_method,
         },
         'robust_dro': {
             'num_epoch': num_epoch,

@@ -563,7 +563,7 @@ def get_domain_grass(
         x_axis_labels = [5, 10, 20, 30, 40, 50, 60, 100]  # labels for x-axis
         y_axis_labels = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]  # labels for y-axis
         
-        grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
+        grad, true_domain, idx_class, true_group, idx_mode, losses, pred_class = collect_gradient(
             model,
             m,
             loader,
@@ -1202,7 +1202,7 @@ def get_domain_grass_george_mix(
             pred_dict = json.load(f)
 
     else:
-        grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
+        grad, true_domain, idx_class, true_group, idx_mode, losses, pred_class = collect_gradient(
             model,
             m,
             loader,
@@ -1870,7 +1870,7 @@ def pred_groups_grass(
         cluster_num,
     )
 
-    grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
+    grad, true_domain, idx_class, true_group, idx_mode, losses, pred_class = collect_gradient(
         model,
         m,
         loader,
@@ -2148,7 +2148,7 @@ def pred_groups_grass_george_mix(
     )
 
     if collect_representation == 'grass':
-        data, true_domain, idx_class, true_group, idx_mode = collect_gradient(
+        data, true_domain, idx_class, true_group, idx_mode, losses, pred_class = collect_gradient(
             model,
             m,
             loader,

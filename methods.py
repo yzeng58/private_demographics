@@ -1496,7 +1496,7 @@ def get_representation(
             for _, features, labels, domains in tqdm_object:
                 features = features.to(device)
                 representations = m(features)
-                if model == 'resnet50':
+                if model in ['resnet50', 'resnet18']:
                     new_data[mode]['features'].append(representations.cpu().detach().squeeze())
 
                 new_data[mode]['labels'].append(labels.detach())

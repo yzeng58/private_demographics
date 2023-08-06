@@ -288,7 +288,7 @@ def collect_gradient(
                 idx_class.append(labels.numpy())
                 features, labels = features.to(device), labels.to(device)
                 for feature, label in zip(features, labels):
-                    if model == 'bert':
+                    if model in ['bert', 'resnet18']:
                         feature = feature[None]
                     output = m(feature)
                     if len(output) == 2:

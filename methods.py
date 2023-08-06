@@ -2132,36 +2132,33 @@ def pred_groups_grass_george_mix(
         cluster_num,
     )
 
-    grad, true_domain, idx_class, true_group, idx_mode = collect_gradient(
-        model,
-        m,
-        loader,
-        device, 
-        optim,
-        num_domain,
-        num_group,
-        task,
-        lr_scheduler,
-        dataset_name,
-        num_class,
-        outlier,
-        cluster_num,
-    )
+    if collect_representation == 'grad':
+        data, true_domain, idx_class, true_group, idx_mode = collect_gradient(
+            model,
+            m,
+            loader,
+            device, 
+            optim,
+            num_domain,
+            num_group,
+            task,
+            lr_scheduler,
+            dataset_name,
+            num_class,
+            outlier,
+            cluster_num,
+        )
 
-    inputs, true_domain, idx_class, true_group, idx_mode, losses, _ = collect_representations(
-        dataset_name,
-        loader,
-        device,
-        m,
-        num_domain,
-        outlier,
-        cluster_num,
-    )
-
-    if collect_representation == 'grass':
-        data = grad
     elif collect_representation == 'george':
-        data = inputs
+        data, true_domain, idx_class, true_group, idx_mode, losses, _ = collect_representations(
+            dataset_name,
+            loader,
+            device,
+            m,
+            num_domain,
+            outlier,
+            cluster_num,
+        )
 
     if clustering_method == 'grass':
         clustering_file_name = os.path.join(folder_name, '%s_%s_y_%d_min_samples_%d_eps_%.2f.npy' % (

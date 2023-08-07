@@ -300,8 +300,8 @@ def collect_gradient(
                         _, output = output
                     else:
                         _, output = output, output 
-                    _, pred = torch.max(output.reshape(1, output.shape[-1]), 1) # check this line
-                    pred_class.extend(pred)
+                    _, pred = torch.max(output.reshape(1, output.shape[-1]), 1)
+                    pred_class.append(pred)
 
                     loss = F.cross_entropy(output.reshape(1, output.shape[-1]), label.reshape(1), reduction = 'none')
                     losses.append(loss.item())
@@ -318,7 +318,7 @@ def collect_gradient(
         true_group = group_idx(true_domain, idx_class, num_domain)
         idx_mode = np.array(idx_mode)
         losses = np.array(losses)
-        pred_class = np.array(pred_class)
+        pred_class = torch.stack(pred_class).cpu().detach().numpy()
 
         if not os.path.isdir(folder_name):
             os.mkdir(folder_name)

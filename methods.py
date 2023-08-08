@@ -2382,7 +2382,6 @@ def pred_groups_jtt(
         num_class,
     )
     
-    
 
 def run_exp(
     method, 
@@ -2649,6 +2648,14 @@ def run_exp(
                                 '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 100, 0.45),
                                 '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 100, 0.1),
                             ]
+                elif dataset_name == 'celeba':
+                    if not use_val_group:
+                        clustering_path = [
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 0, 30, 0.15),
+                            '%s/clustering_y_%d_min_samples_%d_eps_%.2f.npy' % (folder_name, 1, 100, 0.35),
+                        ]
+                    else:
+                        clustering_path = None
                 elif dataset_name == 'compas':
                     if not use_val_group:
                         clustering_path = [
@@ -2817,6 +2824,14 @@ def run_exp(
                             '%s/george_grass_y_0_min_samples_100_eps_0.10.npy' % (folder_name),
                             '%s/george_grass_y_1_min_samples_50_eps_0.25.npy' % (folder_name),  
                         ]
+                elif dataset_name == 'celeba':
+                    if not use_val_group:
+                        clustering_path = [
+                            '%s/george_grass_y_0_min_samples_5_eps_0.45.npy' % (folder_name),
+                            '%s/george_grass_y_1_min_samples_100_eps_0.65.npy' % (folder_name),  
+                        ]
+                    else:
+                        clustering_path = None
                 elif dataset_name == 'civilcomments':
                     if use_val_group:
                         clustering_path = [

@@ -181,7 +181,7 @@ def df_tabular_data(
         df['train_supp'] = train.copy()
     return df
 
-def toy_gen(train_val_test = (0.6,0.2,0.2), seed = 123, var = 0.001, outlier = 1, cluster_num = (100, 100)):
+def toy_gen(train_val_test = (0.5,0.2,0.3), seed = 123, var = 0.001, outlier = 1, cluster_num = (100, 100)):
     np.random.seed(seed)
     X, Y, dfs, centers = {}, {}, {}, defaultdict(dict)
     

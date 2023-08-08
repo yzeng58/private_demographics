@@ -78,6 +78,8 @@ def exp_init(
         test_path = None,
     elif dataset_name == 'varied_toy':
         train_path, val_path, test_path = None, None, None
+    else:
+        raise ValueError('Dataset %s is not supported!' % dataset_name)
 
     device = torch.device(device)
     loader, n, num_domain, num_class, num_feature = read_data(
@@ -212,6 +214,7 @@ def collect_gradient(
     num_class,
     outlier,
     cluster_num,
+    load_cache,
 ):
     """
     This function will return 
@@ -248,6 +251,7 @@ def collect_gradient(
     check_mkdir(folder_name)
     
     try:
+        if not load_cache: raise ValueError('Stop loading cache. Recollecting the cache...')
         with open(os.path.join(folder_name, 'grad.npy'), 'rb') as f:
             grad = np.load(f)
         with open(os.path.join(folder_name, 'true_domain.npy'), 'rb') as f:
@@ -349,11 +353,14 @@ def collect_representations(
     num_domain,
     outlier,
     cluster_num,
+    model,
+    load_cache,
 ):
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     
     try:
+        if not load_cache: raise ValueError('Stop loading cache. Recollecting the cache...')
         with open(os.path.join(folder_name, 'inputs.npy'), 'rb') as f:
             inputs = np.load(f)
         with open(os.path.join(folder_name, 'true_domain.npy'), 'rb') as f:
@@ -379,13 +386,20 @@ def collect_representations(
                 _, preds = torch.max(outputs, 1)
                 loss = F.cross_entropy(outputs, labels, reduction = 'none')
                 losses.extend(list(map(lambda x: x.item(), loss)))
-                inputs.append(features)
+                
+                if model == 'resnet18':
+                    modules = list(m.children())[:-1]  # remove the last FC layer
+                    m_partial = torch.nn.Sequential(*modules) 
+                    with torch.no_grad():
+                        features = m_partial(features)
+
+                inputs.append(features.cpu().numpy())
                 true_domain.append(domains)
                 idx_class.append(labels)
                 idx_mode.extend([mode] * len(batch_idx))
                 pred_class.append(preds)
 
-        inputs = np.array(torch.cat(inputs).cpu())
+        inputs = np.concatenate(inputs, axis=0)
         true_domain = np.array(torch.cat(true_domain).cpu())
         idx_class = np.array(torch.cat(idx_class).cpu())
         true_group = group_idx(true_domain, idx_class, num_domain)
@@ -549,6 +563,7 @@ def get_domain_grass(
     grass_distance_type,
     cluster_num,
     grass_clustering_method,
+    load_cache,
 ):
     m = deepcopy(m)
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
@@ -577,6 +592,7 @@ def get_domain_grass(
             num_class,
             outlier,
             cluster_num,
+            load_cache,
         )
 
         pred_domain = np.zeros(true_domain.shape)
@@ -1084,6 +1100,8 @@ def get_domain_george(
     load_pred_dict = True,
     use_val_group = 1,
     cluster_num = (100, 100),
+    model = 'resnet18',
+    load_cache = True,
 ):
     m = deepcopy(m)
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
@@ -1103,6 +1121,8 @@ def get_domain_george(
             num_domain,
             outlier,
             cluster_num,
+            model,
+            load_cache,
         )
 
         ars_score, ss, pred_domain, pred_dict = george_clustering(
@@ -1183,6 +1203,7 @@ def get_domain_grass_george_mix(
     batch_size = 128,
     use_val_group = 1,
     cluster_num = (100, 100),
+    load_cache = True,
 ):  
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
@@ -1216,6 +1237,7 @@ def get_domain_grass_george_mix(
             num_class,
             outlier,
             cluster_num,
+            load_cache,
         )
         
         inputs, true_domain, idx_class, true_group, idx_mode, losses, _ = collect_representations(
@@ -1226,6 +1248,8 @@ def get_domain_grass_george_mix(
             num_domain,
             outlier,
             cluster_num,
+            model,
+            load_cache,
         )
 
         if collect_representation == 'grass':
@@ -1391,6 +1415,8 @@ def get_domain_jtt(
     log_wandb,
     batch_size, 
     cluster_num,
+    model,
+    load_cache,
 ):
     m = deepcopy(m)
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
@@ -1410,6 +1436,8 @@ def get_domain_jtt(
             num_domain,
             outlier,
             cluster_num,
+            model,
+            load_cache,
         )
         
         pred_dict = jtt_clustering(
@@ -1837,6 +1865,7 @@ def pred_groups_grass(
     cluster_num = (100,100),
     grass_clustering_method = 'dbscan',
     kmeans_k = 2,
+    load_cache = True,
 ):
     [
         m,
@@ -1884,6 +1913,7 @@ def pred_groups_grass(
         num_class,
         outlier,
         cluster_num,
+        load_cache,
     )
 
     grass_clustering(
@@ -2004,6 +2034,7 @@ def pred_groups_george(
     log_wandb,
     use_val_group,
     cluster_num,
+    load_cache,
 ):
 
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
@@ -2050,6 +2081,8 @@ def pred_groups_george(
         num_domain,
         outlier,
         cluster_num,
+        model,
+        load_cache,
     )
 
     george_clustering(
@@ -2111,6 +2144,7 @@ def pred_groups_grass_george_mix(
     model,
     use_val_group,
     cluster_num,
+    load_cache,
 ):
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
@@ -2162,6 +2196,7 @@ def pred_groups_grass_george_mix(
             num_class,
             outlier,
             cluster_num,
+            load_cache,
         )
 
     elif collect_representation == 'george':
@@ -2173,6 +2208,8 @@ def pred_groups_grass_george_mix(
             num_domain,
             outlier,
             cluster_num,
+            model, 
+            load_cache,
         )
         
     else:
@@ -2254,6 +2291,7 @@ def pred_groups_jtt(
     seed,
     log_wandb,
     cluster_num,
+    load_cache,
 ):
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
@@ -2299,6 +2337,8 @@ def pred_groups_jtt(
         num_domain,
         outlier,
         cluster_num,
+        model, 
+        load_cache,
     )
 
     jtt_clustering(
@@ -2364,6 +2404,7 @@ def run_exp(
     save_model = True,
     cluster_num = (100, 100),
     grass_clustering_method = 'dbscan',
+    load_cache = True,
 ):
 
     (   
@@ -2632,6 +2673,7 @@ def run_exp(
             grass_distance_type,
             cluster_num,
             grass_clustering_method,
+            load_cache,
         )
 
         domain_loader['train_iter'] = iter(domain_loader['train'])
@@ -2678,6 +2720,9 @@ def run_exp(
                 metric_types, # ['mean_loss', 'composition']
                 load_pred_dict,
                 use_val_group,
+                cluster_num,
+                model,
+                load_cache,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
@@ -2785,6 +2830,7 @@ def run_exp(
             batch_size,
             use_val_group,
             cluster_num,
+            load_cache,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
@@ -2802,6 +2848,8 @@ def run_exp(
             log_wandb,
             batch_size, 
             cluster_num,
+            model,
+            load_cache,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])
@@ -3228,6 +3276,7 @@ def parse_args():
     parser.add_argument('--toy_num_min', default = 100, type = int)
     parser.add_argument('--grass_clustering_method', default = 'dbscan', type = str, choices = ['kmeans', 'dbscan'])
     parser.add_argument('--kmeans_k', default = 2, type = int, choices = [1,2,3,4])
+    parser.add_argument('--load_cache', default = 1, type = int, choices = [0,1])
 
     args = parser.parse_args()
 
@@ -3287,6 +3336,7 @@ def main():
     cluster_num = (args.toy_num_maj, args.toy_num_min)
     grass_clustering_method = args.grass_clustering_method
     kmeans_k = args.kmeans_k
+    load_cache = args.load_cache
 
     if method in ['grad_george', 'input_dbscan']:
         if method == 'grad_george':
@@ -3326,6 +3376,7 @@ def main():
                 cluster_num,
                 grass_clustering_method,
                 kmeans_k,
+                load_cache,
             )
         elif method == 'jtt':
             pred_groups_jtt(
@@ -3342,6 +3393,7 @@ def main():
                 seed,
                 log_wandb,
                 cluster_num,
+                load_cache,
             )
             
         elif method == 'george':
@@ -3370,6 +3422,7 @@ def main():
                 log_wandb,
                 use_val_group,
                 cluster_num,
+                load_cache,
             )
         elif method == 'eiil':
             pred_groups_eiil(
@@ -3426,6 +3479,7 @@ def main():
                 model,
                 use_val_group,
                 cluster_num,
+                load_cache,
             )
 
     else:
@@ -3478,6 +3532,7 @@ def main():
             save_model,
             cluster_num,
             grass_clustering_method,
+            load_cache,
         )
 
 if __name__ == '__main__':

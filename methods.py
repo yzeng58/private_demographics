@@ -564,19 +564,18 @@ def get_domain_grass(
     cluster_num,
     grass_clustering_method,
     load_cache,
+    clustering_path_use,
 ):
     m = deepcopy(m)
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
     file_name = os.path.join(folder_name, 'pred_dict_%s_outlier_%s_val_%d.json' % (grass_clustering_method, outlier, use_val_group))
 
-    if load_pred_dict: 
+    try:
+        if not load_pred_dict: raise ValueError('Stop loading predicted group annotations. Relearning the group annotations...')
         with open(file_name, 'r') as f:
             pred_dict = json.load(f)
-
-    else:
-        x_axis_labels = [5, 10, 20, 30, 40, 50, 60, 100]  # labels for x-axis
-        y_axis_labels = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]  # labels for y-axis
+    except:
         
         grad, true_domain, idx_class, true_group, idx_mode, losses, pred_class = collect_gradient(
             model,
@@ -651,7 +650,7 @@ def get_domain_grass(
                         process_grad,
                         idx_class,
                         true_domain,
-                        False,
+                        clustering_path_use,
                         grass_distance_type,
                         None,
                         None,
@@ -1204,6 +1203,9 @@ def get_domain_grass_george_mix(
     use_val_group = 1,
     cluster_num = (100, 100),
     load_cache = True,
+    process_grad = True,
+    clustering_path_use = True,
+    grass_distance_type = 'euclidean',
 ):  
     folder_name = results_dir(root_dir, dataset_name, outlier, cluster_num)
     check_mkdir(folder_name)
@@ -1262,8 +1264,32 @@ def get_domain_grass_george_mix(
 
         if clustering_method == 'grass':
             for y in range(num_class):
-                with open(clustering_path[y], 'rb') as f:
-                    dbscan_labels = np.load(f)
+                if clustering_path:
+                    with open(clustering_path[y], 'rb') as f:
+                        dbscan_labels = np.load(f)
+                else:
+                    for eps in np.linspace(0.1, 0.7, 13):
+                        for min_samples in [5, 10, 20, 30, 40, 50, 60, 100]:
+                            ars, nmi, val, iou, iou2, eq, ss, dbscan_labels = grass_clustering(
+                                data,
+                                dataset_name,
+                                eps,
+                                min_samples,
+                                y,
+                                False,
+                                outlier,
+                                process_grad,
+                                idx_class,
+                                true_domain,
+                                clustering_path_use,
+                                grass_distance_type,
+                                None,
+                                None,
+                                None,
+                                cluster_num,
+                                'dbscan',
+                                None,
+                            )
 
                 idx = idx_class == y
                 idx[idx] = dbscan_labels >= 0
@@ -1512,15 +1538,15 @@ def get_representation(
     folder = '%s/privateDemographics/data/%s_%s_outlier_%d_representation' % (root_dir, dataset_name, model, outlier)
 
     new_data = {}
-    if load_representations:
+    try:
+        if not load_representations: raise ValueError('Stop loading representations. Recollecting the representations...')
         for mode in ['train', 'val', 'test']:
             new_data[mode] = {}
             for key in ['features', 'labels', 'domains']:
                 file_path = os.path.join(folder, '%s_%s_%s_%s.pt' % (dataset_name, model, mode, key))
                 new_data[mode][key] = torch.load(file_path)
         print('Representations are loaded from folder %s!' % folder)
-
-    else:
+    except:
         if not os.path.isdir(folder):
             os.mkdir(folder)
 
@@ -2674,6 +2700,7 @@ def run_exp(
             cluster_num,
             grass_clustering_method,
             load_cache,
+            clustering_path_use,
         )
 
         domain_loader['train_iter'] = iter(domain_loader['train'])
@@ -2831,6 +2858,9 @@ def run_exp(
             use_val_group,
             cluster_num,
             load_cache,
+            process_grad,
+            clustering_path_use,
+            grass_distance_type,
         )
         domain_loader['train_iter'] = iter(domain_loader['train'])
         domain_loader['val_iter'] = iter(domain_loader['val'])

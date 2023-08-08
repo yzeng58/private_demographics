@@ -497,7 +497,7 @@ def main(args):
     elif dataset == 'celeba':
         queue = 'x86_1h'
         task = 'fairness'
-        # start_model_path = '%s/privateDemographics/models/compas/erm_num_epoch_300_batch_size_128_lr_2e-05_subsample_0_outlier_0_weight_decay_0.001_best.model' % root_dir
+        start_model_path = '%s/privateDemographics/models/celeba/erm_num_epoch_5_batch_size_400_lr_0.001_subsample_0_weight_decay_0.001_outlier_0_model_resnet18_best.model' % root_dir
         cores = '2+1'
         mem = '16g'
 
@@ -508,6 +508,13 @@ def main(args):
                 ' --lr ': 1e-3,
                 ' --weight_decay ': 1e-3,
             },
+            'grass': {
+                ' --epoch ': 30,
+                ' --batch_size ': 400,
+                ' --lr_q ': [.001, .01, .1],
+                ' --lr ': 1e-3,
+                ' --weight_decay ': 1e-3,
+            }
         }
 
     log_wandb = 0 if args.run == 0 else 1

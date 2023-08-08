@@ -66,6 +66,49 @@ def main(args):
                 ' --clustering_min_samples ': [50, 100]
             }
         }
+        
+    if dataset == 'celeba':
+    
+        start_model_path = '%s/privateDemographics/models/celeba/erm_num_epoch_5_batch_size_400_lr_0.001_subsample_0_weight_decay_0.001_outlier_0_model_resnet18_best.model'  % root_dir
+        num_class = 2
+        mem = '128g'
+
+        if method == 'eiil':
+            queue = 'x86_24h'
+            mem = '64g'
+            cores = '4+1'
+            device = 'cuda'
+        elif method == 'grass':
+            queue = 'x86_1h'
+            mem = '64g'
+            cores = '4+0'
+        else:
+            queue = 'x86_1h'
+            cores = '4+0'
+
+        param_grid = {
+            'grass': {
+                ' --clustering_y ': list(range(num_class)),
+                ' --batch_size ': 400,
+                ' --clustering_eps ': [0.35, 0.5, 0.7],
+                ' --clustering_min_samples ': [50, 100]
+            },
+            'eiil': {
+                ' --lr_ei ': [1e-1, 1e-2, 1e-3, 1e-4],
+                ' --batch_size ': 32,
+                ' --epoch_ei ': 3,
+            },
+            'george': {
+                ' --overcluster_factor ': [1, 2, 5, 10],
+                ' --batch_size ': 32,
+            },
+            'input_dbscan': {
+                ' --clustering_y ': list(range(num_class)),
+                ' --batch_size ': 32,
+                ' --clustering_eps ': [0.35, 0.5, 0.7],
+                ' --clustering_min_samples ': [50, 100]
+            }
+        }
 
     elif dataset == 'synthetic':
         queue = 'x86_1h'

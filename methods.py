@@ -126,11 +126,14 @@ def exp_init(
     elif dataset_name in ['civilcomments', 'multinli']:
         if not model: model = 'bert'
     
-    elif dataset_name in ['synthetic', 'compas', 'toy', 'varied_toy']:
+    elif dataset_name in ['synthetic', 'compas']:
         if not model: model = 'mlp'
 
-    # elif dataset_name in ['toy']:
-    #     if not model: model = 'logreg'
+    elif dataset_name in ['toy', 'varied_toy']:
+        if not model: model = 'logreg'
+        
+    else:
+        raise ValueError('Dataset %s is not supported!' % dataset_name)
 
     m = load_model(
         model = model,

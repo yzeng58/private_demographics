@@ -91,7 +91,7 @@ def main(args):
                 ' --clustering_y ': list(range(num_class)),
                 ' --batch_size ': 400,
                 ' --clustering_eps ': [0.35, 0.5, 0.7],
-                ' --clustering_min_samples ': [50, 100]
+                ' --clustering_min_samples ': [50, 100],
             },
             'eiil': {
                 ' --lr_ei ': [1e-1, 1e-2, 1e-3, 1e-4],
@@ -133,7 +133,26 @@ def main(args):
                 ' --batch_size ': 128,
             }
         }
+    elif dataset == 'varied_toy':
+        queue = 'x86_1h'
+        if outlier:
+            start_model_path = '%s/privateDemographics/models/varied_toy/cluster_500_500/erm_num_epoch_50_batch_size_128_lr_0.001_subsample_0_weight_decay_0.0001_outlier_1_model_logreg_best.model' % root_dir
+        else:
+            start_model_path = '%s/privateDemographics/models/varied_toy/cluster_500_500/erm_num_epoch_50_batch_size_128_lr_0.001_subsample_0_weight_decay_0.0001_outlier_1_model_logreg_best.model' % root_dir
+        num_class = 2
+        cores = '2+0'
 
+        param_grid = {
+            'grass': {
+                ' --clustering_y ': list(range(num_class)),
+                ' --batch_size ': 128,
+                ' --clustering_eps ': np.linspace(0.1, 0.7, 13).tolist(),
+                ' --clustering_min_samples ': [5, 10, 20, 30, 40, 50, 60, 100],
+                ' --toy_num_maj ': 500,
+                ' --toy_num_min ': [100, 200, 300, 400, 500],
+            },
+        }
+    
     elif dataset == 'toy':
         queue = 'x86_1h'
         if outlier:

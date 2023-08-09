@@ -369,17 +369,17 @@ def collect_representations(
         with open(os.path.join(folder_name, 'inputs.npy'), 'rb') as f:
             inputs = np.load(f)
         with open(os.path.join(folder_name, 'true_domain.npy'), 'rb') as f:
-            true_domain = np.load(f)
+            true_domain = np.load(f).astype(np.int8)
         with open(os.path.join(folder_name, 'idx_class.npy'), 'rb') as f:
-            idx_class = np.load(f)
+            idx_class = np.load(f).astype(np.int8)
         with open(os.path.join(folder_name, 'true_group.npy'), 'rb') as f:
-            true_group = np.load(f)
+            true_group = np.load(f).astype(np.int8)
         with open(os.path.join(folder_name, 'idx_mode.npy'), 'rb') as f:
             idx_mode = np.load(f)
         with open(os.path.join(folder_name, 'loss.npy'), 'rb') as f:
             losses = np.load(f)
         with open(os.path.join(folder_name, 'pred_class.npy'), 'rb') as f:
-            pred_class = np.load(f)
+            pred_class = np.load(f).astype(np.int8).reshape(-1)
         print('Loaded all the input information into folder %s...' % folder_name)
     except:
         inputs, true_domain, idx_mode, idx_class, losses, pred_class = [], [], [], [], [], []
@@ -451,7 +451,10 @@ def grass_clustering(
 ):      
     if log_wandb:
         if wandb_group_name is None:
-            wandb_group_name = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier)
+            if dataset_name == 'varied_toy':
+                wandb_group_name = '%s_outlier_%d_group_prediction_1.0_cluster_num_%d_%d' % (dataset_name, outlier, cluster_num[0], cluster_num[1])
+            else:
+                wandb_group_name = '%s_outlier_%d_group_prediction_1.0' % (dataset_name, outlier)
         if job_type is None:
             job_type = 'grass: y=%d' % y
 
@@ -1399,14 +1402,27 @@ def jtt_clustering(
             )
             
     # compare predictions with actual labels
+    print('start ')
+    print(len(idx_class))
+    print("idx_class type:", type(idx_class))
+    print("pred_class type:", type(pred_class))
+
+    print("idx_class dtype:", idx_class.dtype)
+    print("idx_class shape:", idx_class.shape)
+    print("pred_class dtype:", pred_class.dtype)
+    print("pred_class shape:", pred_class.shape)
     misclassified = (idx_class != pred_class).astype(int)
+    print(1)
     pred_domain = copy.deepcopy(misclassified)
     for y in range(num_class):
         idx_y = idx_class == y
         pred_domain[idx_y] = misclassified[idx_y] + 2*y
             
+    print(2)
     true_group = group_idx(true_domain, idx_class, num_domain)
     ars_score = ARS(true_group, pred_domain)
+    
+    print(3)
     
     pred_dict = {}
     pred_dict['num_group'] = len(np.unique(pred_domain))
@@ -1419,6 +1435,7 @@ def jtt_clustering(
             pred_dict['n_%s' % mode].append(int(group.sum()))
         pred_dict[mode] = pred_dict[mode].tolist()
     pred_dict['ars'] = ars_score
+    print('end')
     
     if log_wandb:
         group_stat = np.unique(pred_domain, return_counts = True)
@@ -3169,10 +3186,13 @@ def inference(
                 group = (domains == a) & (labels == y)
             elif task == 'irm':
                 group = domains == g
+        
 
             if group.sum() > 0:
                 domain_acc[g] += torch.sum(bool_correct[group]).item()
                 domain_loss[g] += F.cross_entropy(output[group], labels[group], reduction = 'sum').item()
+
+        
 
     domain_acc, loss, domain_loss = domain_acc / torch.clamp(n[mode],min=1), loss / n[mode].sum(), domain_loss / torch.clamp(n[mode],min=1)
     worst_acc = domain_acc[considered_groups].min()

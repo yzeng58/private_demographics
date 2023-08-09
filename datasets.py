@@ -181,7 +181,14 @@ def df_tabular_data(
         df['train_supp'] = train.copy()
     return df
 
-def toy_gen(train_val_test = (0.5,0.2,0.3), seed = 123, var = 0.001, outlier = 1, cluster_num = (100, 100)):
+def toy_gen(
+    train_val_test = (0.5,0.2,0.3), 
+    seed = 123, 
+    var = 0.001, 
+    outlier = 1, 
+    cluster_num = (100, 100), 
+    outlier_frac = .05,
+):
     np.random.seed(seed)
     X, Y, dfs, centers = {}, {}, {}, defaultdict(dict)
     
@@ -212,7 +219,7 @@ def toy_gen(train_val_test = (0.5,0.2,0.3), seed = 123, var = 0.001, outlier = 1
     split_df['train'], split_df['val'], split_df['test'] = data_df.iloc[:n_train], data_df.iloc[n_train: (n_train + n_val)], data_df.iloc[(n_train + n_val):], 
     
     if outlier: # randomly flip the labels
-        outlier_index = split_df['train'].sample(frac = .05, random_state = 2*seed).index.tolist()
+        outlier_index = split_df['train'].sample(frac = outlier_frac, random_state = 2*seed).index.tolist()
         split_df['train'].loc[outlier_index, 'y'] = 1 - split_df['train'].loc[outlier_index].y
         split_df['train'].loc[outlier_index, 'a'] = np.random.choice([0,1], len(outlier_index))
     
@@ -273,21 +280,13 @@ def read_data(
     random.seed(seed)
     torch.manual_seed(seed)
     if dataset_name in ['synthetic', 'compas', 'toy', 'varied_toy']:
-        if dataset_name in ['synthetic', 'toy']:
+        if dataset_name in ['synthetic', 'toy', 'varied_toy']:
             df = df_tabular_data(
                 train_path,
                 val_path,
                 test_path,
-                train_supp_frac
+                train_supp_frac,
             )
-        elif dataset_name == 'varied_toy':
-            df = toy_gen(cluster_num = cluster_num)
-            if train_supp_frac:
-                n_supp = int(len(df['train']) * train_supp_frac)
-                df['train_supp'] = df['train'].iloc[:n_supp]
-                df['train'] = df['train'].iloc[n_supp:]
-            else:
-                df['train_supp'] = df['train'].copy()
         elif dataset_name == 'compas':
             compas = preprocess_compas(pd.read_csv(
                 '%s/compas-scores-two-years.csv' % train_path

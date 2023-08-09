@@ -71,13 +71,15 @@ def exp_init(
         train_path = '%s/privateDemographics/data/toy/%s_outlier_%d.csv' % (root_dir, 'train', outlier)
         val_path = '%s/privateDemographics/data/toy/%s_outlier_%d.csv' % (root_dir, 'val', outlier)
         test_path = '%s/privateDemographics/data/toy/%s_outlier_%d.csv' % (root_dir, 'test', outlier)
-
+    elif dataset_name == 'varied_toy':
+        print("Loading the varied dataset with %d minority samples!" % cluster_num[1])
+        train_path = f'{root_dir}/privateDemographics/data/toy/train_outlier_1_cluster_num_{cluster_num[0]}_{cluster_num[1]}.csv'
+        val_path = f'{root_dir}/privateDemographics/data/toy/val_outlier_1_cluster_num_{cluster_num[0]}_{cluster_num[1]}.csv'
+        test_path = f'{root_dir}/privateDemographics/data/toy/test_outlier_1_cluster_num_{cluster_num[0]}_{cluster_num[1]}.csv'
     elif dataset_name in ['waterbirds', 'civilcomments', 'multinli', 'compas', 'celeba']:
         train_path = '%s/balanceGroups/data/%s' % (root_dir, dataset_name)
         val_path = None,
         test_path = None,
-    elif dataset_name == 'varied_toy':
-        train_path, val_path, test_path = None, None, None
     else:
         raise ValueError('Dataset %s is not supported!' % dataset_name)
 
